@@ -5,9 +5,9 @@ var visualizer = (() => {
     // ====== GAME CONFIGURATION ======
     // Key Configurations for different modes
     const KEY_CONFIGS = {
-        4: { keys: ['D', 'F', 'J', 'K'], colors: ['#FF6B6B', '#4ECDC4', '#FFE66D', '#95E1D3'] },
-        6: { keys: ['S', 'D', 'F', 'J', 'K', 'L'], colors: ['#FF6B6B', '#FF8C42', '#4ECDC4', '#FFE66D', '#95E1D3', '#A8D8EA'] },
-        8: { keys: ['A', 'S', 'D', 'F', 'J', 'K', 'L', ';'], colors: ['#FF6B6B', '#FF8C42', '#F8E9A1', '#4ECDC4', '#FFE66D', '#95E1D3', '#A8D8EA', '#AA96DA'] }
+        4: { keys: ['D', 'F', 'J', 'K'], colors: ['#FF3366', '#00D4AA', '#00B4FF', '#FF3366'] },
+        6: { keys: ['S', 'D', 'F', 'J', 'K', 'L'], colors: ['#FF3366', '#FF6B35', '#00D4AA', '#00B4FF', '#00D4AA', '#FF3366'] },
+        8: { keys: ['A', 'S', 'D', 'F', 'J', 'K', 'L', ';'], colors: ['#FF3366', '#FF6B35', '#FFB800', '#00D4AA', '#00B4FF', '#00D4AA', '#FF6B35', '#FF3366'] }
     };
 
     const GAME_WIDTH = 500; // Slightly wider
@@ -32,11 +32,11 @@ var visualizer = (() => {
 
     // Difficulty settings
     const DIFFICULTIES = [
-        { stars: 1, name: 'EASY', noteMultiplier: 0.15, segmentThreshold: 0.95, color: '#4ECDC4' },
-        { stars: 2, name: 'NORMAL', noteMultiplier: 0.25, segmentThreshold: 0.85, color: '#95E1D3' },
-        { stars: 3, name: 'HARD', noteMultiplier: 0.4, segmentThreshold: 0.7, color: '#FFE66D' },
-        { stars: 4, name: 'EXPERT', noteMultiplier: 0.6, segmentThreshold: 0.5, color: '#FF8C42' },
-        { stars: 5, name: 'MASTER', noteMultiplier: 0.85, segmentThreshold: 0.3, color: '#FF6B6B' }
+        { stars: 1, name: 'EASY', noteMultiplier: 0.15, segmentThreshold: 0.95, color: '#00D4AA' },
+        { stars: 2, name: 'NORMAL', noteMultiplier: 0.25, segmentThreshold: 0.85, color: '#00B4FF' },
+        { stars: 3, name: 'HARD', noteMultiplier: 0.4, segmentThreshold: 0.7, color: '#FFB800' },
+        { stars: 4, name: 'EXPERT', noteMultiplier: 0.6, segmentThreshold: 0.5, color: '#FF6B35' },
+        { stars: 5, name: 'MASTER', noteMultiplier: 0.85, segmentThreshold: 0.3, color: '#FF3366' }
     ];
 
     // ====== HIGH SCORE STORAGE ======
@@ -85,12 +85,12 @@ var visualizer = (() => {
     }
 
     function getRankFromAccuracy(accuracy) {
-        if (accuracy >= 98) return { rank: 'S+', color: '#FFD700' };
-        if (accuracy >= 95) return { rank: 'S', color: '#FFD700' };
-        if (accuracy >= 90) return { rank: 'A', color: '#00FF88' };
-        if (accuracy >= 80) return { rank: 'B', color: '#4ECDC4' };
-        if (accuracy >= 70) return { rank: 'C', color: '#FFE66D' };
-        return { rank: 'D', color: '#FF6B6B' };
+        if (accuracy >= 98) return { rank: 'S+', color: '#00D4AA' };
+        if (accuracy >= 95) return { rank: 'S', color: '#00D4AA' };
+        if (accuracy >= 90) return { rank: 'A', color: '#00B4FF' };
+        if (accuracy >= 80) return { rank: 'B', color: '#00B4FF' };
+        if (accuracy >= 70) return { rank: 'C', color: '#FFB800' };
+        return { rank: 'D', color: '#FF3366' };
     }
 
     // ====== NOTE SKINS ======
@@ -181,18 +181,76 @@ var visualizer = (() => {
                 ctx.closePath();
                 ctx.fill();
             }
+        },
+        diamond: {
+            name: 'Diamond',
+            drawNote: (ctx, x, y, width, height, color, isHit) => {
+                const centerX = x + width / 2;
+                const centerY = y + height / 2;
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.moveTo(centerX, y);
+                ctx.lineTo(x + width - 8, centerY);
+                ctx.lineTo(centerX, y + height);
+                ctx.lineTo(x + 8, centerY);
+                ctx.closePath();
+                ctx.fill();
+                // Inner shine
+                ctx.fillStyle = lightenColor(color, 50);
+                ctx.beginPath();
+                ctx.moveTo(centerX, y + 6);
+                ctx.lineTo(x + width - 16, centerY);
+                ctx.lineTo(centerX, y + height - 6);
+                ctx.lineTo(x + 16, centerY);
+                ctx.closePath();
+                ctx.fill();
+            }
+        },
+        bar: {
+            name: 'Bar',
+            drawNote: (ctx, x, y, width, height, color, isHit) => {
+                // Simple flat bar with gradient
+                const gradient = ctx.createLinearGradient(x, y, x, y + height);
+                gradient.addColorStop(0, lightenColor(color, 30));
+                gradient.addColorStop(0.5, color);
+                gradient.addColorStop(1, darkenColor(color, 30));
+                ctx.fillStyle = gradient;
+                ctx.fillRect(x + 6, y + 2, width - 12, height - 4);
+                // Top highlight
+                ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                ctx.fillRect(x + 6, y + 2, width - 12, 2);
+            }
+        },
+        wave: {
+            name: 'Wave',
+            drawNote: (ctx, x, y, width, height, color, isHit) => {
+                const centerY = y + height / 2;
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.moveTo(x + 8, centerY);
+                // Upper wave
+                ctx.quadraticCurveTo(x + width * 0.25, y, x + width / 2, centerY);
+                ctx.quadraticCurveTo(x + width * 0.75, y + height, x + width - 8, centerY);
+                // Lower curve back
+                ctx.quadraticCurveTo(x + width * 0.75, y, x + width / 2, centerY);
+                ctx.quadraticCurveTo(x + width * 0.25, y + height, x + 8, centerY);
+                ctx.fill();
+            }
         }
     };
 
-    // Helper for darkenColor
-    function darkenColor(hex, percent) {
+    // Helper for adjusting color brightness (positive = lighten, negative = darken)
+    function adjustColor(hex, percent) {
         const num = parseInt(hex.replace('#', ''), 16);
-        const amt = Math.round(2.55 * percent);
-        const R = Math.max(0, (num >> 16) - amt);
-        const G = Math.max(0, ((num >> 8) & 0x00FF) - amt);
-        const B = Math.max(0, (num & 0x0000FF) - amt);
+        const amt = Math.round(2.55 * Math.abs(percent));
+        const sign = percent >= 0 ? 1 : -1;
+        const R = sign > 0 ? Math.min(255, (num >> 16) + amt) : Math.max(0, (num >> 16) - amt);
+        const G = sign > 0 ? Math.min(255, ((num >> 8) & 0x00FF) + amt) : Math.max(0, ((num >> 8) & 0x00FF) - amt);
+        const B = sign > 0 ? Math.min(255, (num & 0x0000FF) + amt) : Math.max(0, (num & 0x0000FF) - amt);
         return `#${(1 << 24 | R << 16 | G << 8 | B).toString(16).slice(1)}`;
     }
+    const lightenColor = (hex, percent) => adjustColor(hex, percent);
+    const darkenColor = (hex, percent) => adjustColor(hex, -percent);
 
     // ====== SETTINGS STORAGE ======
     const SETTINGS_KEY = 'rhythm_game_settings';
@@ -288,20 +346,27 @@ var visualizer = (() => {
             lastJudgement: null,
             lastJudgementTime: 0,
             lastJudgementLane: -1,
+            lastTiming: null, // 'EARLY', 'LATE', or null for PERFECT
             particles: [],
             hitEffects: [],
             laneFlashes: new Array(LANES).fill(0),
-            holdingLanes: new Array(LANES).fill(false), // For slide hold effect
+            holdingLanes: new Array(LANES).fill(false),
             shakeAmount: 0,
             isPlaying: false,
-            isPaused: false, // Track pause state for visual indicator
+            isPaused: false,
             syncOffset: 0,
             gameStartTime: 0,
             totalNotes: 0,
-            isFullCombo: true, // Track if still full combo
+            isFullCombo: true,
             gameEnded: false,
             songDuration: 0,
-            hp: 100 // Add Health Points
+            hp: 100,
+            // New features
+            isFever: false, // Fever mode active
+            feverMultiplier: 1, // Score multiplier
+            perfectChain: 0, // Consecutive perfect count
+            missFlash: 0, // Red flash on miss (0-1)
+            currentAccuracy: 100 // Real-time accuracy
         });
 
         // Update arrays when lanes change
@@ -321,6 +386,9 @@ var visualizer = (() => {
         const keysHeld = useRef({});
         const animationRef = useRef(null);
         const startedRef = useRef(false);
+        const dprRef = useRef(window.devicePixelRatio || 1);
+        const cachedGradientsRef = useRef(null);
+        const MAX_PARTICLES = 500;
 
         // Generate notes from audio analysis
         const generateNotes = useCallback((analysis, diff) => {
@@ -366,6 +434,7 @@ var visualizer = (() => {
                     const time = bar.start * 1000;
                     const duration = Math.min(bar.duration * 1000, 2000);
 
+                    const totalTicks = Math.max(10, Math.floor(duration / 100));
                     notes.push({
                         id: `slide-${index}`,
                         type: 'slide',
@@ -374,7 +443,9 @@ var visualizer = (() => {
                         duration: duration,
                         hit: false,
                         processed: false,
-                        holding: false
+                        holding: false,
+                        ticksHit: 0,
+                        totalTicks: totalTicks
                     });
                     slideNotes.push({ time, lane, duration });
                 });
@@ -521,9 +592,15 @@ var visualizer = (() => {
             const handleKeyDown = (e) => {
                 if (e.repeat) return;
 
-                // Space key handling - detect play state change instead of blocking
+                // Space key handling - directly control pause/resume
                 if (e.code === 'Space') {
-                    // Don't block - let Spotify handle it, we'll detect the state change
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (Spicetify.Player.isPlaying()) {
+                        Spicetify.Player.pause();
+                    } else {
+                        Spicetify.Player.play();
+                    }
                     return;
                 }
 
@@ -611,10 +688,12 @@ var visualizer = (() => {
                     x: x,
                     y: JUDGE_LINE_Y,
                     radius: 20,
-                    maxRadius: 80,
+                    maxRadius: judgement === 'PERFECT' ? 100 : 80,
                     life: 1,
                     color: LANE_COLORS[lane],
-                    lane: lane
+                    lane: lane,
+                    judgement: judgement,
+                    hue: 0
                 });
             }
         }, [effects]);
@@ -627,6 +706,7 @@ var visualizer = (() => {
 
             let closestNote = null;
             let closestDiff = Infinity;
+            let timingDelta = 0; // Positive = late, negative = early
 
             state.notes.forEach(note => {
                 if (note.lane === lane && !note.hit && !note.passed) {
@@ -635,6 +715,7 @@ var visualizer = (() => {
                     if (diff < closestDiff && diff < TIMING.MISS) {
                         closestDiff = diff;
                         closestNote = note;
+                        timingDelta = currentTime - noteTime;
                     }
                 }
             });
@@ -644,12 +725,20 @@ var visualizer = (() => {
 
                 if (closestDiff <= TIMING.PERFECT) {
                     judgement = 'PERFECT';
+                    state.lastTiming = null; // Perfect = no timing indicator
+                    state.perfectChain++;
                 } else if (closestDiff <= TIMING.GREAT) {
                     judgement = 'GREAT';
+                    state.lastTiming = timingDelta > 0 ? 'LATE' : 'EARLY';
+                    state.perfectChain = 0;
                 } else if (closestDiff <= TIMING.GOOD) {
                     judgement = 'GOOD';
+                    state.lastTiming = timingDelta > 0 ? 'LATE' : 'EARLY';
+                    state.perfectChain = 0;
                 } else {
                     judgement = 'MISS';
+                    state.lastTiming = null;
+                    state.perfectChain = 0;
                 }
 
                 if (closestNote.type === 'slide') {
@@ -660,8 +749,18 @@ var visualizer = (() => {
                     closestNote.hit = true;
                 }
 
+                // Check Fever mode (50+ combo)
+                const wasFever = state.isFever;
+                state.isFever = state.combo >= 50;
+                state.feverMultiplier = state.isFever ? 2.0 : 1.0;
+
+                // Calculate score with fever and combo multiplier
+                const baseScore = SCORE_VALUES[judgement];
+                const comboBonus = 1 + state.combo * 0.05;
+                const feverBonus = state.feverMultiplier;
+                state.score += baseScore * comboBonus * feverBonus;
+
                 state.judgements[judgement]++;
-                state.score += SCORE_VALUES[judgement] * (1 + state.combo * 0.05);
 
                 if (judgement !== 'MISS') {
                     state.combo++;
@@ -672,10 +771,18 @@ var visualizer = (() => {
                 } else {
                     state.combo = 0;
                     state.isFullCombo = false;
+                    state.missFlash = 1.0; // Trigger miss flash
                     // Damage on miss (skip if No Fail enabled)
                     if (!isNoFail) {
                         state.hp = Math.max(0, state.hp - 15);
                     }
+                }
+
+                // Update real-time accuracy
+                const totalHits = state.judgements.PERFECT + state.judgements.GREAT + state.judgements.GOOD + state.judgements.MISS;
+                if (totalHits > 0) {
+                    const weightedScore = state.judgements.PERFECT * 100 + state.judgements.GREAT * 70 + state.judgements.GOOD * 40;
+                    state.currentAccuracy = (weightedScore / totalHits).toFixed(1);
                 }
 
                 state.lastJudgement = judgement;
@@ -765,15 +872,29 @@ var visualizer = (() => {
             if (!canvas) return;
 
             const ctx = canvas.getContext('2d');
-            const dpr = window.devicePixelRatio || 1;
+            const dpr = dprRef.current;
 
             canvas.width = GAME_WIDTH * dpr;
             canvas.height = GAME_HEIGHT * dpr;
             ctx.scale(dpr, dpr);
 
+            // Cache gradients on first render
+            if (!cachedGradientsRef.current) {
+                const bgGradient = ctx.createLinearGradient(0, 0, 0, GAME_HEIGHT);
+                bgGradient.addColorStop(0, '#0a0a18');
+                bgGradient.addColorStop(0.5, '#12122a');
+                bgGradient.addColorStop(1, '#0a0a18');
+                cachedGradientsRef.current = { bgGradient };
+            }
+
             const render = () => {
                 const state = gameStateRef.current;
                 const currentTime = Spicetify.Player.getProgress();
+
+                // Limit particles
+                if (state.particles.length > MAX_PARTICLES) {
+                    state.particles = state.particles.slice(-MAX_PARTICLES);
+                }
 
                 // Update slide notes
                 updateSlideNotes();
@@ -788,12 +909,8 @@ var visualizer = (() => {
                     if (state.shakeAmount < 0.5) state.shakeAmount = 0;
                 }
 
-                // Clear canvas with gradient
-                const bgGradient = ctx.createLinearGradient(0, 0, 0, GAME_HEIGHT);
-                bgGradient.addColorStop(0, '#0a0a18');
-                bgGradient.addColorStop(0.5, '#12122a');
-                bgGradient.addColorStop(1, '#0a0a18');
-                ctx.fillStyle = bgGradient;
+                // Clear canvas with cached gradient
+                ctx.fillStyle = cachedGradientsRef.current.bgGradient;
                 ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
                 // Background visualizer (audio spectrum effect based on combo)
@@ -915,6 +1032,8 @@ var visualizer = (() => {
                         state.judgements.MISS++;
                         state.combo = 0;
                         state.isFullCombo = false;
+                        state.perfectChain = 0;
+                        state.missFlash = 1;
                         // Damage on miss (skip if No Fail enabled)
                         if (!isNoFail) {
                             state.hp = Math.max(0, state.hp - 15);
@@ -1011,14 +1130,48 @@ var visualizer = (() => {
                         const y = JUDGE_LINE_Y - ((note.time - currentTime) / 1000) * NOTE_SPEED;
 
                         if (y > -NOTE_HEIGHT && y < GAME_HEIGHT) {
-                            // Note glow
-                            ctx.shadowColor = LANE_COLORS[note.lane];
-                            ctx.shadowBlur = 18;
+                            // Get modifier settings
+                            const isHidden = settings.modifiers?.hidden;
+                            const isSudden = settings.modifiers?.sudden;
 
-                            // Use note skin drawer
-                            noteSkinDrawer.drawNote(ctx, x, y, LANE_WIDTH, NOTE_HEIGHT, LANE_COLORS[note.lane], note.hit);
+                            // Calculate note alpha based on modifiers
+                            let noteAlpha = 1;
 
-                            ctx.shadowBlur = 0;
+                            // Hidden: fade out when note is in lower half (closer to judge line)
+                            if (isHidden) {
+                                const fadeStart = GAME_HEIGHT * 0.4; // Start fading at 40% from top
+                                const fadeEnd = GAME_HEIGHT * 0.7; // Fully invisible at 70%
+                                if (y > fadeStart) {
+                                    noteAlpha = Math.max(0, 1 - (y - fadeStart) / (fadeEnd - fadeStart));
+                                }
+                            }
+
+                            // Sudden: only visible when note is in lower portion
+                            if (isSudden) {
+                                const appearY = GAME_HEIGHT * 0.45; // Notes appear at 45% from top
+                                if (y < appearY) {
+                                    noteAlpha = 0; // Invisible until reaching appear point
+                                } else {
+                                    // Quick fade in
+                                    const fadeRange = 50;
+                                    noteAlpha = Math.min(1, (y - appearY) / fadeRange);
+                                }
+                            }
+
+                            if (noteAlpha > 0) {
+                                ctx.save();
+                                ctx.globalAlpha = noteAlpha;
+
+                                // Note glow
+                                ctx.shadowColor = LANE_COLORS[note.lane];
+                                ctx.shadowBlur = 18;
+
+                                // Use note skin drawer
+                                noteSkinDrawer.drawNote(ctx, x, y, LANE_WIDTH, NOTE_HEIGHT, LANE_COLORS[note.lane], note.hit);
+
+                                ctx.shadowBlur = 0;
+                                ctx.restore();
+                            }
                         }
                     }
                 });
@@ -1027,13 +1180,29 @@ var visualizer = (() => {
                 state.hitEffects = state.hitEffects.filter(effect => {
                     effect.radius += (effect.maxRadius - effect.radius) * 0.15;
                     effect.life -= 0.04;
+                    effect.hue = (effect.hue + 10) % 360;
 
                     if (effect.life > 0) {
-                        ctx.strokeStyle = effect.color + Math.floor(effect.life * 200).toString(16).padStart(2, '0');
-                        ctx.lineWidth = 4 * effect.life;
+                        // Rainbow effect for PERFECT
+                        if (effect.judgement === 'PERFECT') {
+                            ctx.strokeStyle = `hsla(${effect.hue}, 100%, 60%, ${effect.life})`;
+                            ctx.lineWidth = 6 * effect.life;
+                        } else {
+                            ctx.strokeStyle = effect.color + Math.floor(effect.life * 200).toString(16).padStart(2, '0');
+                            ctx.lineWidth = 4 * effect.life;
+                        }
                         ctx.beginPath();
                         ctx.arc(effect.x, effect.y, effect.radius, 0, Math.PI * 2);
                         ctx.stroke();
+
+                        // Extra inner ring for PERFECT
+                        if (effect.judgement === 'PERFECT' && effect.life > 0.5) {
+                            ctx.strokeStyle = `hsla(${(effect.hue + 180) % 360}, 100%, 70%, ${effect.life * 0.5})`;
+                            ctx.lineWidth = 2;
+                            ctx.beginPath();
+                            ctx.arc(effect.x, effect.y, effect.radius * 0.6, 0, Math.PI * 2);
+                            ctx.stroke();
+                        }
                         return true;
                     }
                     return false;
@@ -1056,7 +1225,30 @@ var visualizer = (() => {
                     return false;
                 });
 
-                // Draw judgement text with animation
+                // Draw miss flash effect (red screen flash)
+                if (state.missFlash > 0) {
+                    ctx.fillStyle = `rgba(255, 51, 102, ${state.missFlash * 0.3})`;
+                    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+                    state.missFlash -= 0.08;
+                    if (state.missFlash < 0) state.missFlash = 0;
+                }
+
+                // Draw HP danger vignette effect
+                if (state.hp < 30) {
+                    const dangerIntensity = (30 - state.hp) / 30;
+                    const pulseTime = performance.now() / 500;
+                    const pulse = state.hp < 20 ? 0.5 + Math.sin(pulseTime) * 0.5 : 1;
+                    const vignetteGradient = ctx.createRadialGradient(
+                        GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_HEIGHT * 0.3,
+                        GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_HEIGHT * 0.8
+                    );
+                    vignetteGradient.addColorStop(0, 'rgba(255, 0, 0, 0)');
+                    vignetteGradient.addColorStop(1, `rgba(255, 0, 0, ${dangerIntensity * 0.4 * pulse})`);
+                    ctx.fillStyle = vignetteGradient;
+                    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+                }
+
+                // Draw judgement text with animation + timing indicator
                 if (state.lastJudgement && performance.now() - state.lastJudgementTime < 400) {
                     const elapsed = performance.now() - state.lastJudgementTime;
                     const progress = elapsed / 400;
@@ -1064,10 +1256,10 @@ var visualizer = (() => {
                     const alpha = 1 - progress;
 
                     const colors = {
-                        PERFECT: '#FFD700',
-                        GREAT: '#00FF88',
-                        GOOD: '#87CEEB',
-                        MISS: '#FF4444'
+                        PERFECT: '#00D4AA',
+                        GREAT: '#00B4FF',
+                        GOOD: '#888888',
+                        MISS: '#FF3366'
                     };
 
                     ctx.save();
@@ -1084,48 +1276,139 @@ var visualizer = (() => {
                     ctx.globalAlpha = alpha;
                     ctx.fillText(state.lastJudgement, 0, 0);
 
+                    // Early/Late indicator
+                    if (state.lastTiming) {
+                        ctx.font = 'bold 18px "Segoe UI", Arial';
+                        ctx.fillStyle = state.lastTiming === 'EARLY' ? '#00B4FF' : '#FF6B35';
+                        ctx.fillText(state.lastTiming, 0, 35);
+                    }
+
+                    // Perfect chain
+                    if (state.perfectChain >= 5) {
+                        ctx.font = 'bold 14px "Segoe UI", Arial';
+                        ctx.fillStyle = '#00D4AA';
+                        ctx.fillText(`${state.perfectChain} PERFECT CHAIN`, 0, -35);
+                    }
+
                     ctx.restore();
                 }
 
-                // Draw score
-                ctx.fillStyle = '#fff';
-                ctx.font = 'bold 28px "Segoe UI", Arial';
-                ctx.textAlign = 'left';
-                ctx.textBaseline = 'top';
-                ctx.fillText(Math.floor(state.score).toLocaleString(), 15, 15);
+                // Miss flash effect
+                if (state.missFlash > 0) {
+                    ctx.fillStyle = `rgba(255, 0, 0, ${state.missFlash * 0.3})`;
+                    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+                    state.missFlash *= 0.85;
+                    if (state.missFlash < 0.05) state.missFlash = 0;
+                }
 
-                // Draw combo with glow
-                if (state.combo > 0) {
-                    const comboScale = 1 + Math.min(state.combo / 100, 0.5);
+                // Fever mode visual - badge in top right
+                if (state.isFever) {
+                    // Rainbow border glow
+                    const hue = (performance.now() / 10) % 360;
+                    ctx.strokeStyle = `hsla(${hue}, 100%, 60%, 0.8)`;
+                    ctx.lineWidth = 4;
+                    ctx.strokeRect(2, 2, GAME_WIDTH - 4, GAME_HEIGHT - 4);
+
+                    // Fever badge
                     ctx.save();
-                    ctx.translate(GAME_WIDTH / 2, 80);
-                    ctx.scale(comboScale, comboScale);
+                    const feverX = GAME_WIDTH - 65;
+                    const feverY = 25;
+                    const feverScale = 1 + Math.sin(performance.now() / 100) * 0.05;
+                    ctx.translate(feverX, feverY);
+                    ctx.scale(feverScale, feverScale);
 
-                    ctx.shadowColor = '#FFD700';
-                    ctx.shadowBlur = 15;
-                    ctx.fillStyle = '#FFD700';
-                    ctx.font = 'bold 42px "Segoe UI", Arial';
-                    ctx.textAlign = 'center';
-                    ctx.fillText(`${state.combo}`, 0, 0);
+                    const feverGradient = ctx.createLinearGradient(-40, -10, 40, 10);
+                    feverGradient.addColorStop(0, '#FF3366');
+                    feverGradient.addColorStop(0.5, '#FFB800');
+                    feverGradient.addColorStop(1, '#00D4AA');
+                    ctx.fillStyle = feverGradient;
+                    ctx.shadowColor = '#00D4AA';
+                    ctx.shadowBlur = 12;
+                    ctx.beginPath();
+                    ctx.roundRect(-40, -12, 80, 24, 12);
+                    ctx.fill();
 
                     ctx.shadowBlur = 0;
-                    ctx.font = 'bold 18px "Segoe UI", Arial';
-                    ctx.fillText('COMBO', 0, 28);
-
+                    ctx.fillStyle = '#000';
+                    ctx.font = 'bold 12px "Segoe UI", Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('FEVER x2', 0, 0);
                     ctx.restore();
                 }
 
-                // Draw difficulty indicator
-                ctx.fillStyle = difficulty?.color || '#fff';
-                ctx.font = 'bold 14px "Segoe UI", Arial';
-                ctx.textAlign = 'right';
-                ctx.fillText(`${difficulty?.name || ''}  ${'★'.repeat(difficulty?.stars || 1)}`, GAME_WIDTH - 15, 25);
+                // Draw progress bar at bottom
+                const songProgress = state.songDuration > 0 ? (currentTime / state.songDuration) : 0;
+                const progressWidth = GAME_WIDTH - 20;
+                ctx.fillStyle = 'rgba(255,255,255,0.1)';
+                ctx.fillRect(10, GAME_HEIGHT - 10, progressWidth, 3);
+                ctx.fillStyle = state.isFever ? '#FF3366' : '#00D4AA';
+                ctx.fillRect(10, GAME_HEIGHT - 10, progressWidth * Math.min(1, songProgress), 3);
 
-                // Draw stats
-                ctx.fillStyle = 'rgba(255,255,255,0.6)';
-                ctx.font = '12px "Segoe UI", Arial';
+                // Draw fever gauge (combo progress to 50)
+                const feverGaugeWidth = 120;
+                const feverGaugeHeight = 8;
+                const feverGaugeX = GAME_WIDTH - feverGaugeWidth - 15;
+                const feverGaugeY = 90;
+                const feverProgress = Math.min(state.combo / 50, 1);
+                const feverTime = performance.now() / 200;
+
+                // Gauge background
+                ctx.fillStyle = 'rgba(255,255,255,0.1)';
+                ctx.beginPath();
+                ctx.roundRect(feverGaugeX, feverGaugeY, feverGaugeWidth, feverGaugeHeight, 4);
+                ctx.fill();
+
+                // Gauge fill (rainbow when in fever)
+                if (state.isFever) {
+                    const rainbowGradient = ctx.createLinearGradient(feverGaugeX, 0, feverGaugeX + feverGaugeWidth, 0);
+                    for (let i = 0; i <= 1; i += 0.2) {
+                        rainbowGradient.addColorStop(i, `hsl(${(feverTime * 50 + i * 360) % 360}, 100%, 60%)`);
+                    }
+                    ctx.fillStyle = rainbowGradient;
+                } else {
+                    const gaugeGradient = ctx.createLinearGradient(feverGaugeX, 0, feverGaugeX + feverGaugeWidth, 0);
+                    gaugeGradient.addColorStop(0, '#00D4AA');
+                    gaugeGradient.addColorStop(1, '#FF3366');
+                    ctx.fillStyle = gaugeGradient;
+                }
+                ctx.beginPath();
+                ctx.roundRect(feverGaugeX, feverGaugeY, feverGaugeWidth * feverProgress, feverGaugeHeight, 4);
+                ctx.fill();
+
+                // Fever label
+                ctx.font = 'bold 10px monospace';
                 ctx.textAlign = 'right';
-                ctx.fillText(`P:${state.judgements.PERFECT} G:${state.judgements.GREAT} O:${state.judgements.GOOD} M:${state.judgements.MISS}`, GAME_WIDTH - 15, 45);
+                ctx.fillStyle = state.isFever ? '#FF3366' : '#888';
+                ctx.fillText(state.isFever ? 'FEVER x2' : 'FEVER', feverGaugeX - 5, feverGaugeY + 7);
+
+                // Combo milestones popup (only shown briefly)
+                const milestones = [50, 100, 200, 300, 500, 1000];
+                if (milestones.includes(state.combo)) {
+                    if (!state.lastMilestone || state.lastMilestone !== state.combo) {
+                        state.lastMilestone = state.combo;
+                        state.milestoneTime = performance.now();
+                    }
+                }
+                if (state.milestoneTime && performance.now() - state.milestoneTime < 800) {
+                    const milestoneElapsed = performance.now() - state.milestoneTime;
+                    const milestoneProgress = milestoneElapsed / 800;
+                    const milestoneAlpha = 1 - milestoneProgress;
+                    const milestoneScale = 1 + milestoneProgress * 0.3;
+
+                    ctx.save();
+                    ctx.globalAlpha = milestoneAlpha;
+                    ctx.translate(GAME_WIDTH / 2, 120);
+                    ctx.scale(milestoneScale, milestoneScale);
+                    ctx.font = 'bold 28px "Segoe UI", Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillStyle = '#00D4AA';
+                    ctx.shadowColor = '#00D4AA';
+                    ctx.shadowBlur = 15;
+                    ctx.fillText(`${state.lastMilestone} COMBO`, 0, 0);
+                    ctx.restore();
+                }
 
                 // Draw pause indicator
                 if (state.isPaused) {
@@ -1171,16 +1454,6 @@ var visualizer = (() => {
         });
     }
 
-    // Helper function
-    function lightenColor(hex, percent) {
-        const num = parseInt(hex.replace('#', ''), 16);
-        const amt = Math.round(2.55 * percent);
-        const R = Math.min(255, (num >> 16) + amt);
-        const G = Math.min(255, ((num >> 8) & 0x00FF) + amt);
-        const B = Math.min(255, (num & 0x0000FF) + amt);
-        return `#${(1 << 24 | R << 16 | G << 8 | B).toString(16).slice(1)}`;
-    }
-
     function formatTime(ms) {
         const s = Math.floor(ms / 1000);
         const m = Math.floor(s / 60);
@@ -1192,7 +1465,7 @@ var visualizer = (() => {
         const [gameState, setGameState] = useState({
             score: 0, combo: 0, maxCombo: 0, hp: 100,
             judgements: { PERFECT: 0, GREAT: 0, GOOD: 0, MISS: 0 },
-            isPaused: false
+            isPaused: false, accuracy: 100, isFever: false
         });
         const [progress, setProgress] = useState(0);
         const [countdown, setCountdown] = useState(3);
@@ -1235,7 +1508,9 @@ var visualizer = (() => {
                         maxCombo: s.maxCombo,
                         hp: s.hp,
                         judgements: { ...s.judgements },
-                        isPaused: s.isPaused
+                        isPaused: s.isPaused,
+                        accuracy: s.currentAccuracy || 100,
+                        isFever: s.isFever || false
                     });
                 }
                 setProgress(Spicetify.Player.getProgress());
@@ -1265,9 +1540,11 @@ var visualizer = (() => {
 
         // Active modifiers list
         const activeModifiers = [];
-        if (modifiers?.mirror) activeModifiers.push({ icon: '🔄', name: 'Mirror' });
-        if (modifiers?.random) activeModifiers.push({ icon: '🎲', name: 'Random' });
-        if (modifiers?.noFail) activeModifiers.push({ icon: '💚', name: 'No Fail' });
+        if (modifiers?.mirror) activeModifiers.push({ icon: 'MIR', name: 'Mirror' });
+        if (modifiers?.random) activeModifiers.push({ icon: 'RND', name: 'Random' });
+        if (modifiers?.noFail) activeModifiers.push({ icon: 'NF', name: 'No Fail' });
+        if (modifiers?.hidden) activeModifiers.push({ icon: 'HD', name: 'Hidden' });
+        if (modifiers?.sudden) activeModifiers.push({ icon: 'SD', name: 'Sudden' });
 
         return React.createElement('div', { className: 'rhythm-container' },
             // Countdown Overlay
@@ -1284,8 +1561,8 @@ var visualizer = (() => {
                     style: {
                         fontSize: countdown === 0 ? '80px' : '120px',
                         fontWeight: '900',
-                        color: countdown === 0 ? '#4ECDC4' : '#fff',
-                        textShadow: `0 0 40px ${countdown === 0 ? '#4ECDC4' : '#fff'}`,
+                        color: countdown === 0 ? '#00D4AA' : '#fff',
+                        textShadow: `0 0 40px ${countdown === 0 ? '#00D4AA' : '#fff'}`,
                         animation: 'pulse 0.5s ease'
                     }
                 }, countdown === 0 ? 'GO!' : countdown),
@@ -1311,25 +1588,25 @@ var visualizer = (() => {
                         className: 'pause-btn',
                         onClick: onRestart,
                         style: {
-                            padding: '14px 32px', borderRadius: '12px', border: '2px solid #4ECDC4',
-                            background: 'transparent', color: '#4ECDC4', fontSize: '14px', fontWeight: '700',
+                            padding: '14px 32px', borderRadius: '12px', border: '2px solid #00D4AA',
+                            background: 'transparent', color: '#00D4AA', fontSize: '14px', fontWeight: '700',
                             cursor: 'pointer', letterSpacing: '1px', transition: 'all 0.2s'
                         }
-                    }, '🔄 RESTART (R)'),
+                    }, 'RESTART (R)'),
                     React.createElement('button', {
                         className: 'pause-btn',
                         onClick: onQuit,
                         style: {
-                            padding: '14px 32px', borderRadius: '12px', border: '2px solid #FF6B6B',
-                            background: 'transparent', color: '#FF6B6B', fontSize: '14px', fontWeight: '700',
+                            padding: '14px 32px', borderRadius: '12px', border: '2px solid #FF3366',
+                            background: 'transparent', color: '#FF3366', fontSize: '14px', fontWeight: '700',
                             cursor: 'pointer', letterSpacing: '1px', transition: 'all 0.2s'
                         }
-                    }, '🏠 QUIT (Q)')
+                    }, 'QUIT (Q)')
                 ),
                 React.createElement('div', { style: { marginTop: '40px', textAlign: 'center' } },
                     React.createElement('div', { style: { fontSize: '12px', color: '#666', marginBottom: '8px' } }, 'CURRENT PROGRESS'),
                     React.createElement('div', { style: { fontSize: '24px', fontWeight: '700' } }, gameState.score.toLocaleString()),
-                    React.createElement('div', { style: { fontSize: '14px', color: '#FFD700', marginTop: '4px' } }, `${gameState.combo} Combo`)
+                    React.createElement('div', { style: { fontSize: '14px', color: '#00D4AA', marginTop: '4px' } }, `${gameState.combo} Combo`)
                 )
             ),
 
@@ -1350,16 +1627,29 @@ var visualizer = (() => {
                             style: {
                                 width: `${gameState.hp}%`,
                                 height: '100%',
-                                background: gameState.hp > 50 ? '#4ECDC4' : (gameState.hp > 20 ? '#FFE66D' : '#FF6B6B'),
+                                background: gameState.hp > 50 ? '#00D4AA' : (gameState.hp > 20 ? '#FFB800' : '#FF3366'),
                                 transition: 'width 0.2s, background 0.2s'
                             }
                         })
                     )
                 ),
                 React.createElement('div', { className: 'combo-container' },
-                    React.createElement('div', { className: 'combo-value' }, gameState.combo),
-                    React.createElement('div', { className: 'combo-label' }, 'COMBO')
+                    React.createElement('div', { className: 'combo-value', style: { color: gameState.isFever ? '#FF3366' : '#00D4AA' } }, gameState.combo),
+                    React.createElement('div', { className: 'combo-label' }, 'COMBO'),
+                    gameState.maxCombo > 0 && React.createElement('div', { style: { fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginTop: '4px' } }, `MAX: ${gameState.maxCombo}`)
                 ),
+                // Accuracy display
+                React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: '12px' } },
+                    React.createElement('span', { style: { fontSize: '12px', color: 'rgba(255,255,255,0.6)' } }, 'ACCURACY'),
+                    React.createElement('span', { style: { fontSize: '18px', fontWeight: '700', color: gameState.accuracy >= 90 ? '#00D4AA' : (gameState.accuracy >= 70 ? '#FFB800' : '#FF3366') } }, `${gameState.accuracy}%`)
+                ),
+                // Fever indicator
+                gameState.isFever && React.createElement('div', {
+                    style: {
+                        padding: '8px 16px', background: 'linear-gradient(90deg, #FF3366, #FFB800, #00D4AA)',
+                        borderRadius: '20px', textAlign: 'center', fontWeight: '700', color: '#000', fontSize: '12px', marginTop: '12px'
+                    }
+                }, 'FEVER x2'),
                 React.createElement('div', { className: 'stats-container' },
                     React.createElement('div', { className: 'stats-title' }, 'JUDGEMENT'),
                     ['PERFECT', 'GREAT', 'GOOD', 'MISS'].map(j =>
@@ -1377,7 +1667,7 @@ var visualizer = (() => {
                         key: m.name,
                         style: {
                             padding: '6px 12px', background: 'rgba(78,205,196,0.2)',
-                            borderRadius: '20px', fontSize: '11px', color: '#4ECDC4'
+                            borderRadius: '20px', fontSize: '11px', color: '#00D4AA'
                         }
                     }, `${m.icon} ${m.name}`))
                 ),
@@ -1397,23 +1687,8 @@ var visualizer = (() => {
                         onGameEnd,
                         settings
                     })
-                ),
-                // Key Hints
-                React.createElement('div', { className: 'key-hints', style: { display: 'flex', gap: '10px', marginTop: '10px' } },
-                    currentKeys.map((key, i) =>
-                        React.createElement('div', {
-                            key: key,
-                            className: 'key-hint',
-                            style: {
-                                background: currentColors[i],
-                                width: '40px', height: '40px',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                borderRadius: '8px', color: '#000', fontWeight: 'bold',
-                                boxShadow: `0 0 10px ${currentColors[i]}40`
-                            }
-                        }, key)
-                    )
                 )
+                // Note: Key hints are displayed in the canvas itself, removed duplicate here
             ),
 
             // Right Panel - Track Info
@@ -1432,7 +1707,7 @@ var visualizer = (() => {
                     }
                 },
                     React.createElement('span', { style: { fontSize: '11px', color: '#888', letterSpacing: '1px' } }, 'BPM'),
-                    React.createElement('span', { style: { fontSize: '20px', fontWeight: '700', color: '#4ECDC4' } }, bpm)
+                    React.createElement('span', { style: { fontSize: '20px', fontWeight: '700', color: '#00D4AA' } }, bpm)
                 ),
                 React.createElement('div', { className: 'progress-container' },
                     React.createElement('div', { className: 'progress-bar' },
@@ -1492,7 +1767,7 @@ var visualizer = (() => {
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0, 0, 60, 36);
             const skin = NOTE_SKINS[skinKey];
-            if (skin) skin.drawNote(ctx, 5, 4, 50, 28, color || '#4ECDC4', false);
+            if (skin) skin.drawNote(ctx, 5, 4, 50, 28, color || '#00D4AA', false);
         }, [skinKey, color]);
         return React.createElement('div', {
             className: `note-preview-card ${isActive ? 'active' : ''}`,
@@ -1540,14 +1815,16 @@ var visualizer = (() => {
                         )
                     )
                 ),
-                // Game Modifiers - NEW
+                // Game Modifiers
                 React.createElement('div', { className: 'setting-card full-width' },
                     React.createElement('div', { className: 'setting-title' }, 'GAME MODIFIERS'),
                     React.createElement('div', { className: 'modifier-grid', style: { display: 'flex', gap: '12px', flexWrap: 'wrap' } },
                         [
-                            { key: 'mirror', icon: '🔄', name: 'Mirror', desc: 'Flip lanes horizontally' },
-                            { key: 'random', icon: '🎲', name: 'Random', desc: 'Randomize note positions' },
-                            { key: 'noFail', icon: '💚', name: 'No Fail', desc: 'Cannot die from HP loss' }
+                            { key: 'mirror', icon: 'MIR', name: 'Mirror', desc: 'Flip lanes horizontally' },
+                            { key: 'random', icon: 'RND', name: 'Random', desc: 'Randomize note positions' },
+                            { key: 'noFail', icon: 'NF', name: 'No Fail', desc: 'Cannot die from HP loss' },
+                            { key: 'hidden', icon: 'HD', name: 'Hidden', desc: 'Notes fade out before judge line' },
+                            { key: 'sudden', icon: 'SD', name: 'Sudden', desc: 'Notes appear near judge line' }
                         ].map(mod => React.createElement('div', {
                             key: mod.key,
                             onClick: () => onSettingChange('modifiers', { ...settings.modifiers, [mod.key]: !settings.modifiers?.[mod.key] }),
@@ -1556,14 +1833,14 @@ var visualizer = (() => {
                                 padding: '14px 16px',
                                 borderRadius: '12px',
                                 background: settings.modifiers?.[mod.key] ? 'rgba(78,205,196,0.2)' : 'rgba(0,0,0,0.2)',
-                                border: `1px solid ${settings.modifiers?.[mod.key] ? '#4ECDC4' : 'rgba(255,255,255,0.08)'}`,
+                                border: `1px solid ${settings.modifiers?.[mod.key] ? '#00D4AA' : 'rgba(255,255,255,0.08)'}`,
                                 cursor: 'pointer',
                                 transition: 'all 0.2s'
                             }
                         },
                             React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' } },
                                 React.createElement('span', { style: { fontSize: '18px' } }, mod.icon),
-                                React.createElement('span', { style: { fontWeight: '700', color: settings.modifiers?.[mod.key] ? '#4ECDC4' : '#fff' } }, mod.name)
+                                React.createElement('span', { style: { fontWeight: '700', color: settings.modifiers?.[mod.key] ? '#00D4AA' : '#fff' } }, mod.name)
                             ),
                             React.createElement('div', { style: { fontSize: '11px', color: 'rgba(255,255,255,0.5)' } }, mod.desc)
                         ))
@@ -1573,10 +1850,10 @@ var visualizer = (() => {
                 React.createElement('div', { className: 'setting-card' },
                     React.createElement('div', { className: 'setting-title' }, 'VISUAL EFFECTS'),
                     React.createElement('div', { className: 'effect-grid' },
-                        [{ key: 'particles', icon: '✨', label: 'Particles' },
-                        { key: 'screenShake', icon: '📳', label: 'Shake' },
-                        { key: 'laneFlash', icon: '💡', label: 'Flash' },
-                        { key: 'hitEffects', icon: '💥', label: 'Hit FX' }
+                        [{ key: 'particles', icon: 'PTL', label: 'Particles' },
+                        { key: 'screenShake', icon: 'SHK', label: 'Shake' },
+                        { key: 'laneFlash', icon: 'FLS', label: 'Flash' },
+                        { key: 'hitEffects', icon: 'HIT', label: 'Hit FX' }
                         ].map(e => React.createElement('div', {
                             key: e.key,
                             className: `effect-toggle ${settings.effects?.[e.key] !== false ? 'active' : ''}`,
@@ -1688,10 +1965,37 @@ var visualizer = (() => {
 
         const albumArt = trackInfo?.album?.images?.[0]?.url || '';
 
+        // SVG Animated Decorations
+        const WaveformSVG = () => React.createElement('div', { className: 'waveform' },
+            [1, 2, 3, 4, 5].map(i => React.createElement('div', { key: i, className: 'bar' }))
+        );
+
+        const OrbitSVG = () => React.createElement('div', {
+            className: 'orbit-container',
+            style: { position: 'absolute', right: '10%', top: '20%', opacity: 0.3, pointerEvents: 'none' }
+        },
+            React.createElement('div', { className: 'orbit-ring' }),
+            React.createElement('div', { className: 'orbit-dot' })
+        );
+
+        const DotGridSVG = () => React.createElement('div', {
+            className: 'dot-grid',
+            style: { left: '5%', bottom: '15%' }
+        },
+            Array(15).fill(0).map((_, i) => React.createElement('div', { key: i, className: 'dot' }))
+        );
+
         return React.createElement('div', { className: 'title-container' },
+            // SVG Decorations
+            React.createElement(OrbitSVG),
+            React.createElement(DotGridSVG),
+
             React.createElement('div', { className: 'title-header' },
                 React.createElement('h1', { className: 'title-logo' }, 'RHYTHM BEAT'),
-                React.createElement('div', { className: 'title-subtitle' }, 'AURORA EDITION')
+                React.createElement('div', { className: 'title-subtitle' }, 'AURORA EDITION'),
+                React.createElement('div', { style: { marginTop: '16px', display: 'flex', justifyContent: 'center' } },
+                    React.createElement(WaveformSVG)
+                )
             ),
 
             trackInfo && React.createElement('div', { className: 'glass-panel track-card' },
@@ -1707,7 +2011,7 @@ var visualizer = (() => {
                     React.createElement('button', {
                         key: tab, className: `nav-tab ${activeTab === tab ? 'active' : ''}`,
                         onClick: () => setActiveTab(tab)
-                    }, tab === 'play' ? '🎮 PLAY' : tab === 'settings' ? '⚙️ SETTINGS' : '📊 STATS')
+                    }, tab === 'play' ? 'PLAY' : tab === 'settings' ? 'SETTINGS' : 'STATS')
                 )
             ),
 
@@ -1732,7 +2036,7 @@ var visualizer = (() => {
                         React.createElement('div', { className: 'hs-value', style: h.c ? { color: h.c } : {} }, h.v)
                     )),
                     highScore.isFullCombo && React.createElement('div', { className: 'hs-item' },
-                        React.createElement('div', { style: { color: '#FFD700', fontWeight: 'bold' } }, '🏆 FC')
+                        React.createElement('div', { style: { color: '#00D4AA', fontWeight: '600', letterSpacing: '2px' } }, 'FC')
                     )
                 ),
                 React.createElement('button', { className: 'start-button', onClick: () => onSelectDifficulty(DIFFICULTIES[selectedDiff]) }, 'START GAME (SPACE)')
@@ -1746,12 +2050,12 @@ var visualizer = (() => {
     // ====== RESULT SCREEN COMPONENT (Refactored) ======
     function ResultScreen({ result, difficulty, onRestart, isNewHighScore }) {
         const getRank = (accuracy) => {
-            if (accuracy >= 98) return { rank: 'S+', color: '#FFD700' };
-            if (accuracy >= 95) return { rank: 'S', color: '#FFD700' };
-            if (accuracy >= 90) return { rank: 'A', color: '#00FF88' };
-            if (accuracy >= 80) return { rank: 'B', color: '#4ECDC4' };
-            if (accuracy >= 70) return { rank: 'C', color: '#FFE66D' };
-            return { rank: 'D', color: '#FF6B6B' };
+            if (accuracy >= 98) return { rank: 'S+', color: '#00D4AA' };
+            if (accuracy >= 95) return { rank: 'S', color: '#00D4AA' };
+            if (accuracy >= 90) return { rank: 'A', color: '#00B4FF' };
+            if (accuracy >= 80) return { rank: 'B', color: '#00B4FF' };
+            if (accuracy >= 70) return { rank: 'C', color: '#FFB800' };
+            return { rank: 'D', color: '#FF3366' };
         };
 
         // Detect Spotify play state change for restart
@@ -1785,7 +2089,7 @@ var visualizer = (() => {
             result.isDead && React.createElement('div', {
                 style: {
                     position: 'absolute', top: '20%', left: '50%', transform: 'translate(-50%, -50%)',
-                    fontSize: '80px', fontWeight: '900', color: '#FF4444', textShadow: '0 0 50px #FF0000',
+                    fontSize: '80px', fontWeight: '300', color: '#FF3366', textShadow: '0 0 50px rgba(255, 51, 102, 0.5)', letterSpacing: '0.1em',
                     zIndex: 100, pointerEvents: 'none'
                 }
             }, 'GAME OVER'),
@@ -1793,7 +2097,7 @@ var visualizer = (() => {
                 // New High Score Banner
                 isNewHighScore && React.createElement('div', {
                     style: {
-                        background: 'linear-gradient(90deg, #FFD700, #FF8C42)',
+                        background: '#00D4AA',
                         color: '#000',
                         padding: '10px 30px',
                         borderRadius: '20px',
@@ -1803,7 +2107,7 @@ var visualizer = (() => {
                         animation: 'pulse-button 1.5s infinite',
                         letterSpacing: '2px'
                     }
-                }, '🎉 NEW HIGH SCORE! 🎉'),
+                }, 'NEW HIGH SCORE!'),
                 React.createElement('div', {
                     className: 'difficulty-badge',
                     style: { background: 'rgba(255,255,255,0.1)', marginBottom: '20px', display: 'inline-flex', padding: '8px 16px', borderRadius: '20px', color: difficulty.color }
@@ -1979,6 +2283,17 @@ var visualizer = (() => {
             setSettings(prev => {
                 const newSettings = { ...prev, [key]: value };
                 saveSettings(newSettings);
+
+                // Show toast notification for important settings
+                const toastMessages = {
+                    speed: `Speed: ${value}`,
+                    offset: `Offset: ${value}ms`,
+                    keyMode: `Key Mode: ${value}K`
+                };
+                if (toastMessages[key] && Spicetify.showNotification) {
+                    Spicetify.showNotification(toastMessages[key]);
+                }
+
                 return newSettings;
             });
         };
@@ -1990,7 +2305,7 @@ var visualizer = (() => {
                     style: {
                         width: '50px', height: '50px',
                         border: '3px solid rgba(255,255,255,0.1)',
-                        borderTopColor: '#4ECDC4',
+                        borderTopColor: '#00D4AA',
                         borderRadius: '50%',
                         animation: 'spin 1s linear infinite'
                     }
