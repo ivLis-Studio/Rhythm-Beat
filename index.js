@@ -757,65 +757,75 @@ var visualizer = (() => {
                 });
             }
 
-            // FOURTH: Add chord notes (simultaneous notes) based on chordChance
+            // FOURTH: Add chord notes (max 2 simultaneous) and rapid sequences
             const chordChance = diff.chordChance || 0;
             if (chordChance > 0) {
-                const tapNotes = notes.filter(n => n.type === 'tap' && !n.isChord);
+                const tapNotes = notes.filter(n => n.type === 'tap' && !n.isChord && !n.isRapidSeq);
                 tapNotes.forEach((note, index) => {
-                    // Use chordChance to determine if this note becomes a chord
                     if (Math.random() > chordChance) return;
-                    // Prefer adding chords on downbeats and accents
+                    // Prefer adding on downbeats and accents
                     if (!note.isDownbeat && !note.isAccent && Math.random() > 0.5) return;
 
-                    // Add a second note in a different lane
-                    let chordLane;
-                    if (diff.stars >= 9) {
-                        // ★9-10: 3-4 note chords very common
-                        const numExtraNotes = Math.random() < 0.5 ? 3 : (Math.random() < 0.7 ? 2 : 1);
-                        for (let i = 0; i < numExtraNotes; i++) {
-                            chordLane = (note.lane + 1 + i) % LANES;
-                            if (chordLane !== note.lane && !overlapsWithSlide(note.time, chordLane)) {
-                                notes.push({
-                                    id: `chord-${index}-${i}`,
-                                    type: 'tap',
-                                    time: note.time,
-                                    lane: chordLane,
-                                    hit: false,
-                                    passed: false,
-                                    confidence: note.confidence,
-                                    isChord: true
-                                });
-                            }
+                    // High difficulty: convert some chords to rapid sequences (다다다닥 느낌)
+                    const useRapidSequence = diff.stars >= 6 && Math.random() < 0.6;
+                    
+                    if (useRapidSequence) {
+                        // Create rapid sequence instead of chord (다다다닥)
+                        let rapidLength, rapidInterval;
+                        if (diff.stars >= 10) {
+                            rapidLength = 4 + Math.floor(Math.random() * 3); // 4-6 notes
+                            rapidInterval = 40 + Math.floor(Math.random() * 20); // 40-60ms
+                        } else if (diff.stars >= 9) {
+                            rapidLength = 3 + Math.floor(Math.random() * 3); // 3-5 notes
+                            rapidInterval = 50 + Math.floor(Math.random() * 20); // 50-70ms
+                        } else if (diff.stars >= 8) {
+                            rapidLength = 3 + Math.floor(Math.random() * 2); // 3-4 notes
+                            rapidInterval = 60 + Math.floor(Math.random() * 20); // 60-80ms
+                        } else if (diff.stars >= 7) {
+                            rapidLength = 2 + Math.floor(Math.random() * 2); // 2-3 notes
+                            rapidInterval = 70 + Math.floor(Math.random() * 20); // 70-90ms
+                        } else {
+                            rapidLength = 2;
+                            rapidInterval = 80 + Math.floor(Math.random() * 20); // 80-100ms
                         }
-                    } else if (diff.stars >= 7) {
-                        // ★7-8: 2-3 note chords
-                        const numExtraNotes = Math.random() < 0.4 ? 2 : 1;
-                        for (let i = 0; i < numExtraNotes; i++) {
-                            chordLane = (note.lane + 1 + i * 2) % LANES;
-                            if (chordLane !== note.lane && !overlapsWithSlide(note.time, chordLane)) {
+                        
+                        let currentLane = note.lane;
+                        for (let i = 1; i < rapidLength; i++) {
+                            // Alternate or move lanes for variety
+                            if (diff.stars >= 8) {
+                                // More chaotic movement
+                                const move = (i % 2 === 0) ? 1 : -1;
+                                currentLane = Math.max(0, Math.min(LANES - 1, currentLane + move));
+                            } else {
+                                // Simple alternating
+                                currentLane = (note.lane + (i % 2 === 0 ? 0 : 1)) % LANES;
+                            }
+                            
+                            const seqTime = note.time + i * rapidInterval;
+                            if (!overlapsWithSlide(seqTime, currentLane)) {
                                 notes.push({
-                                    id: `chord-${index}-${i}`,
+                                    id: `rapid-${index}-${i}`,
                                     type: 'tap',
-                                    time: note.time,
-                                    lane: chordLane,
+                                    time: seqTime,
+                                    lane: currentLane,
                                     hit: false,
                                     passed: false,
                                     confidence: note.confidence,
-                                    isChord: true
+                                    isRapidSeq: true
                                 });
                             }
                         }
                     } else {
-                        // Standard 2-note chord
-                        chordLane = note.lane <= LANES / 2 ? note.lane + 2 : note.lane - 2;
-                        const clampedLane = Math.max(0, Math.min(LANES - 1, chordLane));
+                        // Standard 2-note chord only (max 2 simultaneous)
+                        let chordLane = note.lane <= LANES / 2 ? note.lane + 2 : note.lane - 2;
+                        chordLane = Math.max(0, Math.min(LANES - 1, chordLane));
 
-                        if (clampedLane !== note.lane && !overlapsWithSlide(note.time, clampedLane)) {
+                        if (chordLane !== note.lane && !overlapsWithSlide(note.time, chordLane)) {
                             notes.push({
                                 id: `chord-${index}`,
                                 type: 'tap',
                                 time: note.time,
-                                lane: clampedLane,
+                                lane: chordLane,
                                 hit: false,
                                 passed: false,
                                 confidence: note.confidence,
@@ -936,6 +946,31 @@ var visualizer = (() => {
                     }
                 }
             }
+
+            // LIMIT: Maximum 2 simultaneous notes - spread excess into rapid sequence
+            filteredNotes.sort((a, b) => a.time - b.time);
+            const simultaneousGroups = new Map();
+            
+            filteredNotes.forEach((note, idx) => {
+                if (note.type === 'slide') return;
+                const timeKey = Math.round(note.time);
+                if (!simultaneousGroups.has(timeKey)) {
+                    simultaneousGroups.set(timeKey, []);
+                }
+                simultaneousGroups.get(timeKey).push({ note, idx });
+            });
+            
+            // Spread notes if more than 2 simultaneous
+            const spreadInterval = diff.stars >= 8 ? 50 : (diff.stars >= 6 ? 70 : 90);
+            simultaneousGroups.forEach((group) => {
+                if (group.length > 2) {
+                    // Keep first 2, spread the rest into rapid sequence
+                    group.slice(2).forEach((item, i) => {
+                        item.note.time += (i + 1) * spreadInterval;
+                        item.note.isRapidSeq = true; // Mark as part of rapid sequence
+                    });
+                }
+            });
 
             // Ensure minimum gap between notes for playability
             // Gap decreases at higher difficulties for faster patterns
