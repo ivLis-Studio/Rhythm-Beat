@@ -2043,8 +2043,10 @@ var visualizer = (() => {
                 )
             ),
 
-            // Left Panel - Score & Stats
-            React.createElement('div', { className: 'glass-panel left-panel' },
+            // Game Layout Wrapper for fullscreen scaling
+            React.createElement('div', { className: 'game-layout' },
+                // Left Panel - Score & Stats
+                React.createElement('div', { className: 'glass-panel left-panel' },
                 React.createElement('div', { className: 'score-container' },
                     React.createElement('div', { className: 'score-value' }, gameState.score.toLocaleString())
                 ),
@@ -2155,6 +2157,7 @@ var visualizer = (() => {
                     )
                 )
             )
+            ) // Close game-layout div
         );
     }
 

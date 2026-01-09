@@ -91,6 +91,14 @@ body {
   position: relative;
 }
 
+/* Game Layout - wrapper for 3 panel layout */
+.game-layout {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+}
+
 /* Layout Panels */
 .left-panel,
 .right-panel {
