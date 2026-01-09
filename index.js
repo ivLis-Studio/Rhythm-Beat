@@ -799,16 +799,30 @@ var visualizer = (() => {
                         }
                         
                         let currentLane = note.lane;
+                        let lastLane = note.lane;
                         for (let i = 1; i < rapidLength; i++) {
-                            // Alternate or move lanes for variety
+                            // ALWAYS change lane - never same lane twice in a row
+                            let newLane;
                             if (diff.stars >= 8) {
-                                // More chaotic movement
-                                const move = (i % 2 === 0) ? 1 : -1;
-                                currentLane = Math.max(0, Math.min(LANES - 1, currentLane + move));
+                                // Chaotic zigzag - bigger jumps
+                                const possibleMoves = [-2, -1, 1, 2].filter(m => {
+                                    const target = currentLane + m;
+                                    return target >= 0 && target < LANES && target !== lastLane;
+                                });
+                                const move = possibleMoves[Math.floor(Math.random() * possibleMoves.length)] || (currentLane > 0 ? -1 : 1);
+                                newLane = Math.max(0, Math.min(LANES - 1, currentLane + move));
                             } else {
-                                // Simple alternating
-                                currentLane = (note.lane + (i % 2 === 0 ? 0 : 1)) % LANES;
+                                // Alternating between adjacent lanes
+                                if (currentLane === 0) {
+                                    newLane = 1;
+                                } else if (currentLane === LANES - 1) {
+                                    newLane = LANES - 2;
+                                } else {
+                                    newLane = currentLane + (i % 2 === 0 ? 1 : -1);
+                                }
                             }
+                            lastLane = currentLane;
+                            currentLane = newLane;
                             
                             const seqTime = note.time + i * rapidInterval;
                             if (!overlapsWithSlide(seqTime, currentLane)) {
@@ -881,25 +895,43 @@ var visualizer = (() => {
                     }
                     
                     let currentLane = Math.floor(Math.random() * LANES);
+                    let lastLane = -1;
                     
                     for (let i = 0; i < burstLength; i++) {
                         const noteTime = startTime + i * burstInterval;
                         
-                        // Complex lane patterns at high difficulty
+                        // ALWAYS change lane - never same lane twice in a row
                         if (i > 0) {
+                            let newLane;
                             if (diff.stars >= 9) {
-                                // Chaotic zigzag pattern
-                                const patterns = [1, -1, 2, -2, 1, -1];
-                                currentLane = Math.max(0, Math.min(LANES - 1, currentLane + patterns[i % patterns.length]));
+                                // Chaotic pattern - random but never same lane
+                                const availableLanes = [];
+                                for (let l = 0; l < LANES; l++) {
+                                    if (l !== lastLane) availableLanes.push(l);
+                                }
+                                newLane = availableLanes[Math.floor(Math.random() * availableLanes.length)];
                             } else if (diff.stars >= 7) {
-                                // Alternating pattern
-                                const direction = i % 2 === 0 ? 1 : -1;
-                                currentLane = Math.max(0, Math.min(LANES - 1, currentLane + direction * (Math.random() < 0.3 ? 2 : 1)));
+                                // Zigzag pattern
+                                const possibleMoves = [-2, -1, 1, 2].filter(m => {
+                                    const target = currentLane + m;
+                                    return target >= 0 && target < LANES && target !== lastLane;
+                                });
+                                const move = possibleMoves[Math.floor(Math.random() * possibleMoves.length)] || (currentLane > 0 ? -1 : 1);
+                                newLane = Math.max(0, Math.min(LANES - 1, currentLane + move));
                             } else {
-                                // Simple alternating
-                                const direction = i % 2 === 0 ? 1 : -1;
-                                currentLane = Math.max(0, Math.min(LANES - 1, currentLane + direction));
+                                // Simple alternating - adjacent lanes
+                                if (currentLane === 0) {
+                                    newLane = 1;
+                                } else if (currentLane === LANES - 1) {
+                                    newLane = LANES - 2;
+                                } else {
+                                    newLane = currentLane + (i % 2 === 0 ? 1 : -1);
+                                }
                             }
+                            lastLane = currentLane;
+                            currentLane = newLane;
+                        } else {
+                            lastLane = currentLane;
                         }
                         
                         if (!overlapsWithSlide(noteTime, currentLane)) {
