@@ -662,6 +662,51 @@ body {
   transform: translateY(0);
 }
 
+/* Fullscreen Button */
+.fullscreen-button {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 1001;
+  backdrop-filter: blur(10px);
+}
+
+.fullscreen-button svg {
+  width: 16px;
+  height: 16px;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.fullscreen-button:hover {
+  background: rgba(0, 212, 170, 0.15);
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 212, 170, 0.2);
+}
+
+.fullscreen-button:hover svg {
+  opacity: 1;
+}
+
+.fullscreen-button:active {
+  transform: translateY(0);
+}
+
 /* ========================================
    SETTINGS SCREEN
    ======================================== */
