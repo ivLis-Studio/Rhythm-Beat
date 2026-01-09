@@ -33,7 +33,7 @@ var visualizer = (() => {
         PERFECT: 50,
         GREAT: 100,
         GOOD: 150,
-        MISS: 250
+        MISS: 270
     };
 
     // Note synchronization threshold (ms) - notes within this window will be synchronized
@@ -52,13 +52,18 @@ var visualizer = (() => {
         MISS: 0
     };
 
-    // Difficulty settings
+    // Difficulty settings - 10 levels with progressive challenge
     const DIFFICULTIES = [
-        { stars: 1, name: 'EASY', noteMultiplier: 0.15, segmentThreshold: 0.95, color: '#00D4AA' },
-        { stars: 2, name: 'NORMAL', noteMultiplier: 0.25, segmentThreshold: 0.85, color: '#00B4FF' },
-        { stars: 3, name: 'HARD', noteMultiplier: 0.4, segmentThreshold: 0.7, color: '#FFB800' },
-        { stars: 4, name: 'EXPERT', noteMultiplier: 0.6, segmentThreshold: 0.5, color: '#FF6B35' },
-        { stars: 5, name: 'MASTER', noteMultiplier: 0.85, segmentThreshold: 0.3, color: '#FF3366' }
+        { stars: 1, name: 'BEGINNER', noteMultiplier: 0.10, segmentThreshold: 0.98, color: '#88E0A0', chordChance: 0, slideChance: 0, burstChance: 0 },
+        { stars: 2, name: 'EASY', noteMultiplier: 0.18, segmentThreshold: 0.95, color: '#00D4AA', chordChance: 0, slideChance: 0, burstChance: 0 },
+        { stars: 3, name: 'NORMAL', noteMultiplier: 0.28, segmentThreshold: 0.88, color: '#00B4FF', chordChance: 0.05, slideChance: 0, burstChance: 0 },
+        { stars: 4, name: 'HARD', noteMultiplier: 0.40, segmentThreshold: 0.78, color: '#3399FF', chordChance: 0.10, slideChance: 0.05, burstChance: 0 },
+        { stars: 5, name: 'EXPERT', noteMultiplier: 0.55, segmentThreshold: 0.65, color: '#FFB800', chordChance: 0.18, slideChance: 0.12, burstChance: 0.05 },
+        { stars: 6, name: 'MASTER', noteMultiplier: 0.70, segmentThreshold: 0.50, color: '#FF9500', chordChance: 0.25, slideChance: 0.18, burstChance: 0.10 },
+        { stars: 7, name: 'LUNATIC', noteMultiplier: 0.82, segmentThreshold: 0.38, color: '#FF6B35', chordChance: 0.32, slideChance: 0.25, burstChance: 0.15 },
+        { stars: 8, name: 'INFERNO', noteMultiplier: 0.92, segmentThreshold: 0.25, color: '#FF3366', chordChance: 0.40, slideChance: 0.30, burstChance: 0.22 },
+        { stars: 9, name: 'CHAOS', noteMultiplier: 1.0, segmentThreshold: 0.15, color: '#CC00FF', chordChance: 0.50, slideChance: 0.38, burstChance: 0.30 },
+        { stars: 10, name: 'ABSOLUTE', noteMultiplier: 1.15, segmentThreshold: 0.08, color: '#FF0066', chordChance: 0.60, slideChance: 0.45, burstChance: 0.40 }
     ];
 
     // ====== HIGH SCORE STORAGE ======
@@ -411,7 +416,7 @@ var visualizer = (() => {
         const startedRef = useRef(false);
         const dprRef = useRef(window.devicePixelRatio || 1);
         const cachedGradientsRef = useRef(null);
-        const MAX_PARTICLES = 500;
+        const MAX_PARTICLES = 200; // Reduced for better performance
 
         // Generate notes from audio analysis - Improved algorithm
         const generateNotes = useCallback((analysis, diff) => {
@@ -468,12 +473,30 @@ var visualizer = (() => {
             };
 
             // Helper function to check if a time overlaps with any slide note in the same lane
-            const overlapsWithSlide = (time, lane) => {
-                return slideNotes.some(slide =>
-                    slide.lane === lane &&
-                    time >= slide.time - 100 &&
-                    time <= slide.time + slide.duration + 100
-                );
+            const overlapsWithSlide = (time, lane, duration = 0) => {
+                const noteStart = time;
+                const noteEnd = time + duration;
+                return slideNotes.some(slide => {
+                    if (slide.lane !== lane) return false;
+                    const slideStart = slide.time - MIN_SLIDE_END_GAP;
+                    const slideEnd = slide.time + slide.duration + MIN_SLIDE_END_GAP;
+                    // Check if the time ranges overlap
+                    return (noteStart < slideEnd && noteEnd > slideStart);
+                });
+            };
+
+            // Helper function to check if a new slide note overlaps with existing slides
+            const slideOverlapsWithExisting = (time, lane, duration) => {
+                const newStart = time;
+                const newEnd = time + duration;
+                return slideNotes.some(slide => {
+                    if (slide.lane !== lane) return false;
+                    const existingStart = slide.time;
+                    const existingEnd = slide.time + slide.duration;
+                    // Check overlap with buffer
+                    const buffer = MIN_SLIDE_END_GAP;
+                    return (newStart < existingEnd + buffer && newEnd > existingStart - buffer);
+                });
             };
 
             // Apply lane modifier
@@ -571,25 +594,60 @@ var visualizer = (() => {
                 return Math.max(0, Math.min(LANES - 1, targetLane));
             };
 
-            // FIRST: Generate slide notes for higher difficulties (on sustained notes/sections)
-            if (diff.stars >= 3) {
+            // FIRST: Generate slide notes based on difficulty slideChance
+            const slideChance = diff.slideChance || 0;
+            if (slideChance > 0) {
+                // Sort sections by time to process in order
+                const sortedSections = [...sections].sort((a, b) => a.start - b.start);
+                
                 // Use sections with high loudness for slide notes
-                sections.forEach((section, index) => {
+                sortedSections.forEach((section, index) => {
                     if (section.loudness < -10) return; // Skip quiet sections
-                    if (index % (6 - diff.stars) !== 0) return;
+                    
+                    // Use slideChance to determine frequency
+                    if (Math.random() > slideChance * 2) return;
 
                     const time = section.start * 1000;
                     if (time < MIN_NOTE_TIME) return;
 
                     // Duration based on section confidence and difficulty
-                    const maxDuration = Math.min(section.duration * 1000 * 0.3, 2000);
-                    const duration = Math.max(500, maxDuration * (section.confidence || 0.5));
+                    const baseDuration = Math.min(section.duration * 1000 * 0.4, 2500);
+                    const duration = Math.max(400, baseDuration * (section.confidence || 0.5) * (0.8 + diff.stars * 0.05));
 
-                    // Place slide notes on edge lanes for easier play
-                    let lane = index % 2 === 0 ? 0 : LANES - 1;
+                    // Place slide notes - higher difficulties can use more lanes
+                    let lane;
+                    if (diff.stars <= 4) {
+                        lane = index % 2 === 0 ? 0 : LANES - 1; // Edge lanes only
+                    } else if (diff.stars <= 7) {
+                        lane = Math.floor(Math.random() * LANES); // Any lane
+                    } else {
+                        // High difficulty: weighted towards center for challenge
+                        const centerWeight = Math.random();
+                        if (centerWeight < 0.4) {
+                            lane = Math.floor(LANES / 2) + (Math.random() > 0.5 ? 0 : -1);
+                        } else {
+                            lane = Math.floor(Math.random() * LANES);
+                        }
+                    }
                     lane = applyLaneModifier(lane);
 
-                    const totalTicks = Math.max(10, Math.floor(duration / 100));
+                    // Check if this slide overlaps with existing slides
+                    if (slideOverlapsWithExisting(time, lane, duration)) {
+                        // Try to find an alternative lane
+                        let foundLane = false;
+                        for (let tryLane = 0; tryLane < LANES; tryLane++) {
+                            const altLane = applyLaneModifier(tryLane);
+                            if (!slideOverlapsWithExisting(time, altLane, duration)) {
+                                lane = altLane;
+                                foundLane = true;
+                                break;
+                            }
+                        }
+                        // If no lane is available, skip this slide note
+                        if (!foundLane) return;
+                    }
+
+                    const totalTicks = Math.max(10, Math.floor(duration / 80));
                     notes.push({
                         id: `slide-${index}`,
                         type: 'slide',
@@ -688,27 +746,96 @@ var visualizer = (() => {
                 });
             }
 
-            // FOURTH: Add chord notes (simultaneous notes) on strong beats for higher difficulties
-            if (diff.stars >= 4) {
-                const downbeats = notes.filter(n => n.isDownbeat && n.type === 'tap');
-                downbeats.forEach((note, index) => {
-                    if (index % 2 !== 0) return; // Only every other downbeat
+            // FOURTH: Add chord notes (simultaneous notes) based on chordChance
+            const chordChance = diff.chordChance || 0;
+            if (chordChance > 0) {
+                const tapNotes = notes.filter(n => n.type === 'tap' && !n.isChord);
+                tapNotes.forEach((note, index) => {
+                    // Use chordChance to determine if this note becomes a chord
+                    if (Math.random() > chordChance) return;
+                    // Prefer adding chords on downbeats and accents
+                    if (!note.isDownbeat && !note.isAccent && Math.random() > 0.5) return;
 
                     // Add a second note in a different lane
-                    const chordLane = note.lane <= LANES / 2 ? note.lane + 2 : note.lane - 2;
-                    const clampedLane = Math.max(0, Math.min(LANES - 1, chordLane));
+                    let chordLane;
+                    if (diff.stars >= 8) {
+                        // Very high difficulty: 3-note chords possible
+                        const numExtraNotes = Math.random() < 0.3 ? 2 : 1;
+                        for (let i = 0; i < numExtraNotes; i++) {
+                            chordLane = (note.lane + 1 + i * 2) % LANES;
+                            if (chordLane !== note.lane && !overlapsWithSlide(note.time, chordLane)) {
+                                notes.push({
+                                    id: `chord-${index}-${i}`,
+                                    type: 'tap',
+                                    time: note.time,
+                                    lane: chordLane,
+                                    hit: false,
+                                    passed: false,
+                                    confidence: note.confidence,
+                                    isChord: true
+                                });
+                            }
+                        }
+                    } else {
+                        // Standard 2-note chord
+                        chordLane = note.lane <= LANES / 2 ? note.lane + 2 : note.lane - 2;
+                        const clampedLane = Math.max(0, Math.min(LANES - 1, chordLane));
 
-                    if (clampedLane !== note.lane && !overlapsWithSlide(note.time, clampedLane)) {
-                        notes.push({
-                            id: `chord-${index}`,
-                            type: 'tap',
-                            time: note.time,
-                            lane: clampedLane,
-                            hit: false,
-                            passed: false,
-                            confidence: note.confidence,
-                            isChord: true
-                        });
+                        if (clampedLane !== note.lane && !overlapsWithSlide(note.time, clampedLane)) {
+                            notes.push({
+                                id: `chord-${index}`,
+                                type: 'tap',
+                                time: note.time,
+                                lane: clampedLane,
+                                hit: false,
+                                passed: false,
+                                confidence: note.confidence,
+                                isChord: true
+                            });
+                        }
+                    }
+                });
+            }
+
+            // FIFTH: Add burst notes (rapid consecutive notes) for highest difficulties
+            const burstChance = diff.burstChance || 0;
+            if (burstChance > 0 && diff.stars >= 5) {
+                const highEnergySegments = segments.filter(s => (s.loudness_max || -20) > maxLoudness - loudnessRange * 0.2);
+                highEnergySegments.forEach((segment, index) => {
+                    if (Math.random() > burstChance) return;
+                    
+                    const startTime = segment.start * 1000;
+                    if (startTime < MIN_NOTE_TIME) return;
+                    
+                    // Check if there's already notes close by
+                    const hasNearbyNotes = notes.some(n => Math.abs(n.time - startTime) < 200);
+                    if (hasNearbyNotes) return;
+                    
+                    // Create a burst of 3-6 rapid notes
+                    const burstLength = 3 + Math.floor(Math.random() * (diff.stars >= 8 ? 4 : 2));
+                    const burstInterval = Math.max(80, 150 - diff.stars * 8); // Faster at higher difficulties
+                    let currentLane = Math.floor(Math.random() * LANES);
+                    
+                    for (let i = 0; i < burstLength; i++) {
+                        const noteTime = startTime + i * burstInterval;
+                        // Alternate lanes for playability
+                        if (i > 0) {
+                            const direction = i % 2 === 0 ? 1 : -1;
+                            currentLane = Math.max(0, Math.min(LANES - 1, currentLane + direction));
+                        }
+                        
+                        if (!overlapsWithSlide(noteTime, currentLane)) {
+                            notes.push({
+                                id: `burst-${index}-${i}`,
+                                type: 'tap',
+                                time: noteTime,
+                                lane: applyLaneModifier(currentLane),
+                                hit: false,
+                                passed: false,
+                                confidence: 0.8,
+                                isBurst: true
+                            });
+                        }
                     }
                 });
             }
@@ -961,9 +1088,9 @@ var visualizer = (() => {
                 state.laneFlashes[lane] = 1;
             }
 
-            // Explosion particles (if enabled)
+            // Explosion particles (if enabled) - reduced count for performance
             if (effects?.particles !== false) {
-                const particleCount = judgement === 'PERFECT' ? 25 : judgement === 'GREAT' ? 15 : 8;
+                const particleCount = judgement === 'PERFECT' ? 12 : judgement === 'GREAT' ? 8 : 4;
                 for (let i = 0; i < particleCount; i++) {
                     const angle = (Math.PI * 2 / particleCount) * i + Math.random() * 0.5;
                     const speed = 3 + Math.random() * 6;
@@ -1175,13 +1302,32 @@ var visualizer = (() => {
             canvas.height = GAME_HEIGHT * dpr;
             ctx.scale(dpr, dpr);
 
-            // Cache gradients on first render
+            // Cache gradients on first render for performance
             if (!cachedGradientsRef.current) {
                 const bgGradient = ctx.createLinearGradient(0, 0, 0, GAME_HEIGHT);
                 bgGradient.addColorStop(0, '#0a0a18');
                 bgGradient.addColorStop(0.5, '#12122a');
                 bgGradient.addColorStop(1, '#0a0a18');
-                cachedGradientsRef.current = { bgGradient };
+
+                // Cache lane gradients
+                const laneGradients = [];
+                for (let i = 0; i < LANES; i++) {
+                    const x = LANE_START_X + i * LANE_WIDTH;
+                    const laneGradient = ctx.createLinearGradient(x, 0, x, GAME_HEIGHT);
+                    laneGradient.addColorStop(0, 'rgba(20, 20, 40, 0.4)');
+                    laneGradient.addColorStop(0.8, 'rgba(30, 30, 60, 0.6)');
+                    laneGradient.addColorStop(1, 'rgba(40, 40, 80, 0.8)');
+                    laneGradients.push(laneGradient);
+                }
+
+                // Cache judge line gradient
+                const judgeGradient = ctx.createLinearGradient(LANE_START_X, 0, LANE_START_X + LANES * LANE_WIDTH, 0);
+                judgeGradient.addColorStop(0, LANE_COLORS[0]);
+                judgeGradient.addColorStop(0.33, LANE_COLORS[1]);
+                judgeGradient.addColorStop(0.66, LANE_COLORS[2]);
+                judgeGradient.addColorStop(1, LANE_COLORS[3]);
+
+                cachedGradientsRef.current = { bgGradient, laneGradients, judgeGradient };
             }
 
             const render = () => {
@@ -1210,41 +1356,34 @@ var visualizer = (() => {
                 ctx.fillStyle = cachedGradientsRef.current.bgGradient;
                 ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-                // Background visualizer (audio spectrum effect based on combo)
+                // Background visualizer (audio spectrum effect based on combo) - optimized
                 if (backgroundVisualizer !== false) {
-                    const barCount = 32;
+                    const barCount = 16; // Reduced from 32 for performance
                     const barWidth = GAME_WIDTH / barCount;
-                    const maxBarHeight = GAME_HEIGHT * 0.3;
+                    const maxBarHeight = GAME_HEIGHT * 0.25;
                     const time = performance.now() / 1000;
+                    const comboBoost = Math.min(state.combo / 100, 1) * 0.5;
 
                     for (let i = 0; i < barCount; i++) {
-                        // Create pseudo-audio data based on time and combo
-                        const frequency = (Math.sin(time * 2 + i * 0.3) + 1) / 2;
-                        const comboBoost = Math.min(state.combo / 100, 1) * 0.5;
-                        const height = (frequency * 0.5 + comboBoost) * maxBarHeight * (0.3 + Math.random() * 0.2);
+                        // Simplified calculation
+                        const frequency = (Math.sin(time * 2 + i * 0.5) + 1) * 0.25;
+                        const height = (frequency + comboBoost) * maxBarHeight;
 
-                        // Color based on position
-                        const hue = (i / barCount) * 60 + 180; // Cyan to purple
-                        const alpha = 0.15 + comboBoost * 0.1;
+                        const hue = (i / barCount) * 60 + 180;
+                        const alpha = 0.12 + comboBoost * 0.08;
 
                         ctx.fillStyle = `hsla(${hue}, 70%, 50%, ${alpha})`;
                         ctx.fillRect(i * barWidth, GAME_HEIGHT - height, barWidth - 2, height);
-
-                        // Mirror on top
-                        ctx.fillRect(i * barWidth, 0, barWidth - 2, height * 0.5);
                     }
                 }
 
-                // Draw lane backgrounds with flash effect
+                // Draw lane backgrounds with flash effect - use cached gradients
+                const { laneGradients, judgeGradient } = cachedGradientsRef.current;
                 for (let i = 0; i < LANES; i++) {
                     const x = LANE_START_X + i * LANE_WIDTH;
 
-                    // Lane gradient
-                    const laneGradient = ctx.createLinearGradient(x, 0, x, GAME_HEIGHT);
-                    laneGradient.addColorStop(0, 'rgba(20, 20, 40, 0.4)');
-                    laneGradient.addColorStop(0.8, 'rgba(30, 30, 60, 0.6)');
-                    laneGradient.addColorStop(1, 'rgba(40, 40, 80, 0.8)');
-                    ctx.fillStyle = laneGradient;
+                    // Use cached lane gradient
+                    ctx.fillStyle = laneGradients[i] || 'rgba(30, 30, 60, 0.6)';
                     ctx.fillRect(x, 0, LANE_WIDTH, GAME_HEIGHT);
 
                     // Lane flash on hit
@@ -1264,16 +1403,10 @@ var visualizer = (() => {
                     ctx.stroke();
                 }
 
-                // Draw judge line with pulsing glow
+                // Draw judge line with pulsing glow - use cached gradient
                 const pulseIntensity = 0.7 + Math.sin(performance.now() / 200) * 0.3;
                 ctx.shadowColor = difficulty?.color || '#00ff88';
-                ctx.shadowBlur = 25 * pulseIntensity;
-
-                const judgeGradient = ctx.createLinearGradient(LANE_START_X, 0, LANE_START_X + LANES * LANE_WIDTH, 0);
-                judgeGradient.addColorStop(0, LANE_COLORS[0]);
-                judgeGradient.addColorStop(0.33, LANE_COLORS[1]);
-                judgeGradient.addColorStop(0.66, LANE_COLORS[2]);
-                judgeGradient.addColorStop(1, LANE_COLORS[3]);
+                ctx.shadowBlur = 20 * pulseIntensity;
 
                 ctx.strokeStyle = judgeGradient;
                 ctx.lineWidth = 5;
@@ -1348,53 +1481,44 @@ var visualizer = (() => {
                         const startY = JUDGE_LINE_Y - ((note.time - currentTime) / 1000) * NOTE_SPEED;
                         const endY = JUDGE_LINE_Y - ((note.time + note.duration - currentTime) / 1000) * NOTE_SPEED;
 
-                        if (endY < GAME_HEIGHT && startY > -NOTE_HEIGHT) {
-                            // Slide body
-                            const bodyGradient = ctx.createLinearGradient(x, 0, x + LANE_WIDTH, 0);
-                            bodyGradient.addColorStop(0, LANE_COLORS[note.lane] + '80');
-                            bodyGradient.addColorStop(0.5, LANE_COLORS[note.lane] + 'CC');
-                            bodyGradient.addColorStop(1, LANE_COLORS[note.lane] + '80');
+                        // Skip if completely off-screen
+                        if (endY >= GAME_HEIGHT || startY <= -NOTE_HEIGHT * 2) return;
 
-                            ctx.fillStyle = bodyGradient;
+                        if (endY < GAME_HEIGHT && startY > -NOTE_HEIGHT) {
+                            // Slide body - simplified solid color instead of gradient
+                            ctx.fillStyle = LANE_COLORS[note.lane] + 'AA';
                             const clampedStartY = Math.min(startY, JUDGE_LINE_Y);
                             const clampedEndY = Math.max(endY, -NOTE_HEIGHT);
                             ctx.fillRect(x + 8, clampedEndY, LANE_WIDTH - 16, clampedStartY - clampedEndY);
 
                             // Slide end cap
                             if (endY > -NOTE_HEIGHT) {
-                                ctx.shadowColor = LANE_COLORS[note.lane];
-                                ctx.shadowBlur = 10;
                                 ctx.fillStyle = LANE_COLORS[note.lane];
                                 ctx.beginPath();
                                 ctx.roundRect(x + 5, endY, LANE_WIDTH - 10, NOTE_HEIGHT, 4);
                                 ctx.fill();
-                                ctx.shadowBlur = 0;
                             }
 
                             // Slide start cap (only if visible and not passed)
                             if (startY > -NOTE_HEIGHT && startY < GAME_HEIGHT && !note.hit) {
                                 ctx.shadowColor = LANE_COLORS[note.lane];
-                                ctx.shadowBlur = 15;
-                                const headGradient = ctx.createLinearGradient(x, startY, x + LANE_WIDTH, startY);
-                                headGradient.addColorStop(0, LANE_COLORS[note.lane]);
-                                headGradient.addColorStop(0.5, lightenColor(LANE_COLORS[note.lane], 40));
-                                headGradient.addColorStop(1, LANE_COLORS[note.lane]);
-                                ctx.fillStyle = headGradient;
+                                ctx.shadowBlur = 12;
+                                ctx.fillStyle = lightenColor(LANE_COLORS[note.lane], 20);
                                 ctx.beginPath();
                                 ctx.roundRect(x + 5, startY, LANE_WIDTH - 10, NOTE_HEIGHT, 6);
                                 ctx.fill();
                                 ctx.shadowBlur = 0;
                             }
 
-                            // Holding effect - enhanced
+                            // Holding effect - simplified
                             if (note.holding) {
                                 const holdX = x + LANE_WIDTH / 2;
 
                                 // Glowing center line
                                 ctx.shadowColor = LANE_COLORS[note.lane];
-                                ctx.shadowBlur = 25;
+                                ctx.shadowBlur = 15;
                                 ctx.strokeStyle = LANE_COLORS[note.lane];
-                                ctx.lineWidth = 4;
+                                ctx.lineWidth = 3;
                                 ctx.beginPath();
                                 ctx.moveTo(holdX, Math.max(endY, 0));
                                 ctx.lineTo(holdX, JUDGE_LINE_Y);
@@ -1402,22 +1526,22 @@ var visualizer = (() => {
                                 ctx.shadowBlur = 0;
 
                                 // Pulsing glow at judge line
-                                const pulseSize = 20 + Math.sin(performance.now() / 80) * 8;
+                                const pulseSize = 18 + Math.sin(performance.now() / 100) * 6;
                                 ctx.fillStyle = LANE_COLORS[note.lane] + '60';
                                 ctx.beginPath();
                                 ctx.arc(holdX, JUDGE_LINE_Y, pulseSize, 0, Math.PI * 2);
                                 ctx.fill();
 
-                                // Animated particles going up
-                                if (Math.random() < 0.3) {
+                                // Animated particles going up - reduced frequency
+                                if (Math.random() < 0.15) {
                                     state.particles.push({
                                         x: holdX + (Math.random() - 0.5) * 30,
                                         y: JUDGE_LINE_Y,
                                         vx: (Math.random() - 0.5) * 2,
-                                        vy: -Math.random() * 5 - 3,
-                                        life: 0.7,
+                                        vy: -Math.random() * 4 - 2,
+                                        life: 0.5,
                                         color: LANE_COLORS[note.lane],
-                                        size: 2 + Math.random() * 3
+                                        size: 2 + Math.random() * 2
                                     });
                                 }
                             }
@@ -1425,6 +1549,9 @@ var visualizer = (() => {
                     } else {
                         // Draw tap note
                         const y = JUDGE_LINE_Y - ((note.time - currentTime) / 1000) * NOTE_SPEED;
+
+                        // Early skip for off-screen notes
+                        if (y <= -NOTE_HEIGHT || y >= GAME_HEIGHT + NOTE_HEIGHT) return;
 
                         if (y > -NOTE_HEIGHT && y < GAME_HEIGHT) {
                             // Get modifier settings
@@ -1505,18 +1632,17 @@ var visualizer = (() => {
                     return false;
                 });
 
-                // Draw particles
+                // Draw particles - optimized
                 state.particles = state.particles.filter(p => {
                     p.x += p.vx;
                     p.y += p.vy;
-                    p.vy += 0.25;
-                    p.life -= 0.025;
+                    p.vy += 0.3;
+                    p.life -= 0.035;
 
                     if (p.life > 0) {
-                        ctx.fillStyle = p.color + Math.floor(p.life * 255).toString(16).padStart(2, '0');
-                        ctx.beginPath();
-                        ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
-                        ctx.fill();
+                        const alpha = Math.floor(p.life * 200);
+                        ctx.fillStyle = p.color + alpha.toString(16).padStart(2, '0');
+                        ctx.fillRect(p.x - p.size * 0.5, p.y - p.size * 0.5, p.size, p.size);
                         return true;
                     }
                     return false;
@@ -1530,18 +1656,10 @@ var visualizer = (() => {
                     if (state.missFlash < 0) state.missFlash = 0;
                 }
 
-                // Draw HP danger vignette effect
-                if (state.hp < 30) {
-                    const dangerIntensity = (30 - state.hp) / 30;
-                    const pulseTime = performance.now() / 500;
-                    const pulse = state.hp < 20 ? 0.5 + Math.sin(pulseTime) * 0.5 : 1;
-                    const vignetteGradient = ctx.createRadialGradient(
-                        GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_HEIGHT * 0.3,
-                        GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_HEIGHT * 0.8
-                    );
-                    vignetteGradient.addColorStop(0, 'rgba(255, 0, 0, 0)');
-                    vignetteGradient.addColorStop(1, `rgba(255, 0, 0, ${dangerIntensity * 0.4 * pulse})`);
-                    ctx.fillStyle = vignetteGradient;
+                // Draw HP danger vignette effect - only when critical
+                if (state.hp < 25) {
+                    const dangerIntensity = (25 - state.hp) / 25;
+                    ctx.fillStyle = `rgba(255, 0, 0, ${dangerIntensity * 0.15})`;
                     ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
                 }
 
@@ -2086,7 +2204,10 @@ var visualizer = (() => {
                     React.createElement('div', { className: 'speed-control' },
                         React.createElement('button', { className: 'speed-btn', onClick: () => onSettingChange('speed', Math.max(1, settings.speed - 1)) }, '−'),
                         React.createElement('div', { className: 'speed-display' }, settings.speed),
-                        React.createElement('button', { className: 'speed-btn', onClick: () => onSettingChange('speed', Math.min(10, settings.speed + 1)) }, '+')
+                        React.createElement('button', { className: 'speed-btn', onClick: () => onSettingChange('speed', Math.min(30, settings.speed + 1)) }, '+')
+                    ),
+                    React.createElement('div', { style: { fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginTop: '8px', textAlign: 'center' } },
+                        `Speed: ${settings.speed <= 10 ? 'Normal' : settings.speed <= 20 ? 'Fast' : 'Ultra'}`
                     )
                 ),
                 // Keys
