@@ -32,8 +32,8 @@ var visualizer = (() => {
     const TIMING = {
         PERFECT: 70,
         GREAT: 140,
-        GOOD: 230,
-        MISS: 350
+        GOOD: 240,
+        MISS: 360
     };
 
     // Note synchronization threshold (ms) - notes within this window will be synchronized
@@ -1290,87 +1290,103 @@ var visualizer = (() => {
             let closestDiff = Infinity;
             let timingDelta = 0; // Positive = late, negative = early
 
+            // Input window: only process input if note is within range
+            // Allow early input up to TIMING.MISS before the note time
+            // This prevents hitting notes that are still far away
+            const earlyInputWindow = TIMING.MISS; // 350ms early window (can press before note arrives)
+            const lateInputWindow = TIMING.MISS;  // 350ms late window
+
             state.notes.forEach(note => {
                 if (note.lane === lane && !note.hit && !note.passed) {
                     const noteTime = note.time;
-                    const diff = Math.abs(currentTime - noteTime);
-                    if (diff < closestDiff && diff < TIMING.MISS) {
-                        closestDiff = diff;
+                    const timeDiff = currentTime - noteTime; // negative = early, positive = late
+                    const absDiff = Math.abs(timeDiff);
+                    
+                    // Only consider notes within the input window
+                    // Early: note hasn't arrived yet (timeDiff < 0), allow up to earlyInputWindow ms early
+                    // Late: note has passed (timeDiff > 0), allow up to lateInputWindow ms late
+                    const isWithinWindow = (timeDiff >= -earlyInputWindow && timeDiff <= lateInputWindow);
+                    
+                    if (isWithinWindow && absDiff < closestDiff) {
+                        closestDiff = absDiff;
                         closestNote = note;
-                        timingDelta = currentTime - noteTime;
+                        timingDelta = timeDiff;
                     }
                 }
             });
 
-            if (closestNote) {
-                let judgement;
-
-                if (closestDiff <= TIMING.PERFECT) {
-                    judgement = 'PERFECT';
-                    state.lastTiming = null; // Perfect = no timing indicator
-                    state.perfectChain++;
-                } else if (closestDiff <= TIMING.GREAT) {
-                    judgement = 'GREAT';
-                    state.lastTiming = timingDelta > 0 ? 'LATE' : 'EARLY';
-                    state.perfectChain = 0;
-                } else if (closestDiff <= TIMING.GOOD) {
-                    judgement = 'GOOD';
-                    state.lastTiming = timingDelta > 0 ? 'LATE' : 'EARLY';
-                    state.perfectChain = 0;
-                } else {
-                    judgement = 'MISS';
-                    state.lastTiming = null;
-                    state.perfectChain = 0;
-                }
-
-                if (closestNote.type === 'slide') {
-                    closestNote.holding = true;
-                    closestNote.hit = true;
-                    state.holdingLanes[lane] = true;
-                } else {
-                    closestNote.hit = true;
-                }
-
-                // Check Fever mode (50+ combo)
-                const wasFever = state.isFever;
-                state.isFever = state.combo >= 50;
-                state.feverMultiplier = state.isFever ? 2.0 : 1.0;
-
-                // Calculate score with fever and combo multiplier
-                const baseScore = SCORE_VALUES[judgement];
-                const comboBonus = 1 + state.combo * 0.05;
-                const feverBonus = state.feverMultiplier;
-                state.score += baseScore * comboBonus * feverBonus;
-
-                state.judgements[judgement]++;
-
-                if (judgement !== 'MISS') {
-                    state.combo++;
-                    state.maxCombo = Math.max(state.maxCombo, state.combo);
-                    addHitEffect(lane, judgement);
-                    // Heal on hit
-                    state.hp = Math.min(100, state.hp + (judgement === 'PERFECT' ? 2 : 1));
-                } else {
-                    state.combo = 0;
-                    state.isFullCombo = false;
-                    state.missFlash = 1.0; // Trigger miss flash
-                    // Damage on miss (skip if No Fail enabled)
-                    if (!isNoFail) {
-                        state.hp = Math.max(0, state.hp - 15);
-                    }
-                }
-
-                // Update real-time accuracy
-                const totalHits = state.judgements.PERFECT + state.judgements.GREAT + state.judgements.GOOD + state.judgements.MISS;
-                if (totalHits > 0) {
-                    const weightedScore = state.judgements.PERFECT * 100 + state.judgements.GREAT * 70 + state.judgements.GOOD * 40;
-                    state.currentAccuracy = (weightedScore / totalHits).toFixed(1);
-                }
-
-                state.lastJudgement = judgement;
-                state.lastJudgementTime = performance.now();
-                state.lastJudgementLane = lane;
+            // If no note found within window, ignore the input (no miss penalty)
+            if (!closestNote) {
+                return; // Simply ignore - don't trigger miss
             }
+
+            let judgement;
+
+            if (closestDiff <= TIMING.PERFECT) {
+                judgement = 'PERFECT';
+                state.lastTiming = null; // Perfect = no timing indicator
+                state.perfectChain++;
+            } else if (closestDiff <= TIMING.GREAT) {
+                judgement = 'GREAT';
+                state.lastTiming = timingDelta > 0 ? 'LATE' : 'EARLY';
+                state.perfectChain = 0;
+            } else if (closestDiff <= TIMING.GOOD) {
+                judgement = 'GOOD';
+                state.lastTiming = timingDelta > 0 ? 'LATE' : 'EARLY';
+                state.perfectChain = 0;
+            } else {
+                judgement = 'MISS';
+                state.lastTiming = null;
+                state.perfectChain = 0;
+            }
+
+            if (closestNote.type === 'slide') {
+                closestNote.holding = true;
+                closestNote.hit = true;
+                state.holdingLanes[lane] = true;
+            } else {
+                closestNote.hit = true;
+            }
+
+            // Check Fever mode (50+ combo)
+            const wasFever = state.isFever;
+            state.isFever = state.combo >= 50;
+            state.feverMultiplier = state.isFever ? 2.0 : 1.0;
+
+            // Calculate score with fever and combo multiplier
+            const baseScore = SCORE_VALUES[judgement];
+            const comboBonus = 1 + state.combo * 0.05;
+            const feverBonus = state.feverMultiplier;
+            state.score += baseScore * comboBonus * feverBonus;
+
+            state.judgements[judgement]++;
+
+            if (judgement !== 'MISS') {
+                state.combo++;
+                state.maxCombo = Math.max(state.maxCombo, state.combo);
+                addHitEffect(lane, judgement);
+                // Heal on hit
+                state.hp = Math.min(100, state.hp + (judgement === 'PERFECT' ? 2 : 1));
+            } else {
+                state.combo = 0;
+                state.isFullCombo = false;
+                state.missFlash = 1.0; // Trigger miss flash
+                // Damage on miss (skip if No Fail enabled)
+                if (!isNoFail) {
+                    state.hp = Math.max(0, state.hp - 15);
+                }
+            }
+
+            // Update real-time accuracy
+            const totalHits = state.judgements.PERFECT + state.judgements.GREAT + state.judgements.GOOD + state.judgements.MISS;
+            if (totalHits > 0) {
+                const weightedScore = state.judgements.PERFECT * 100 + state.judgements.GREAT * 70 + state.judgements.GOOD * 40;
+                state.currentAccuracy = (weightedScore / totalHits).toFixed(1);
+            }
+
+            state.lastJudgement = judgement;
+            state.lastJudgementTime = performance.now();
+            state.lastJudgementLane = lane;
         }, [addHitEffect, settings.offset, settings.modifiers]);
 
         // Update slide notes
