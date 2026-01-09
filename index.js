@@ -17,11 +17,16 @@ var visualizer = (() => {
 
     // Timing windows (in ms)
     const TIMING = {
-        PERFECT: 40,
-        GREAT: 80,
-        GOOD: 120,
-        MISS: 180
+        PERFECT: 50,
+        GREAT: 100,
+        GOOD: 150,
+        MISS: 250
     };
+
+    // Note synchronization threshold (ms) - notes within this window will be synchronized
+    const NOTE_SYNC_THRESHOLD = 80;
+    // Minimum time before notes can appear (ms)
+    const MIN_NOTE_TIME = 1000;
 
     const SCORE_VALUES = {
         PERFECT: 1000,
@@ -501,7 +506,56 @@ var visualizer = (() => {
                 }
             });
 
-            return notes.sort((a, b) => a.time - b.time);
+            // Sort notes by time first
+            notes.sort((a, b) => a.time - b.time);
+
+            // Filter out notes in the first second (0~1000ms)
+            const filteredNotes = notes.filter(note => note.time >= MIN_NOTE_TIME);
+
+            // Synchronize near-simultaneous notes (within NOTE_SYNC_THRESHOLD)
+            // Group notes that are close in time and align them to the earliest time in the group
+            for (let i = 0; i < filteredNotes.length; i++) {
+                const baseNote = filteredNotes[i];
+                if (baseNote.type === 'slide') continue; // Skip slide notes for sync
+
+                // Find all notes within the threshold that are in different lanes
+                for (let j = i + 1; j < filteredNotes.length; j++) {
+                    const compareNote = filteredNotes[j];
+                    if (compareNote.type === 'slide') continue;
+
+                    const timeDiff = Math.abs(compareNote.time - baseNote.time);
+                    if (timeDiff <= NOTE_SYNC_THRESHOLD && compareNote.lane !== baseNote.lane) {
+                        // Snap the later note to the earlier note's time
+                        compareNote.time = baseNote.time;
+                    } else if (timeDiff > NOTE_SYNC_THRESHOLD) {
+                        // Notes are sorted, so no need to check further
+                        break;
+                    }
+                }
+            }
+
+            // Snap notes to BPM grid if tempo info is available
+            const tempo = analysis?.track?.tempo;
+            if (tempo && tempo > 0) {
+                const beatInterval = 60000 / tempo; // ms per beat
+                const quarterBeat = beatInterval / 4;
+
+                filteredNotes.forEach(note => {
+                    if (note.type === 'slide') return;
+
+                    // Find the nearest beat subdivision (quarter beat)
+                    const beatPosition = note.time / quarterBeat;
+                    const snappedBeatPosition = Math.round(beatPosition);
+                    const snappedTime = snappedBeatPosition * quarterBeat;
+
+                    // Only snap if within reasonable distance (half of quarter beat)
+                    if (Math.abs(note.time - snappedTime) < quarterBeat / 2) {
+                        note.time = snappedTime;
+                    }
+                });
+            }
+
+            return filteredNotes;
         }, [LANES, settings.modifiers]);
 
         // Initialize game
