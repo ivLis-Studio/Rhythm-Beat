@@ -761,13 +761,22 @@ var visualizer = (() => {
             const chordChance = diff.chordChance || 0;
             if (chordChance > 0) {
                 const tapNotes = notes.filter(n => n.type === 'tap' && !n.isChord && !n.isRapidSeq);
+                let lastChordTime = -Infinity; // Track last chord time to prevent consecutive chords
+                const minChordGap = 500; // Minimum gap between chords (ms)
+                
                 tapNotes.forEach((note, index) => {
                     if (Math.random() > chordChance) return;
                     // Prefer adding on downbeats and accents
                     if (!note.isDownbeat && !note.isAccent && Math.random() > 0.5) return;
 
-                    // High difficulty: convert some chords to rapid sequences (다다다닥 느낌)
-                    const useRapidSequence = diff.stars >= 6 && Math.random() < 0.6;
+                    // Check if this would be a consecutive chord (prevent chord → chord)
+                    const timeSinceLastChord = note.time - lastChordTime;
+                    const wouldBeConsecutive = timeSinceLastChord < minChordGap;
+                    
+                    // High difficulty: convert most to rapid sequences, but allow occasional chords
+                    // If would be consecutive, always use rapid sequence instead
+                    const rapidChance = diff.stars >= 8 ? 0.85 : (diff.stars >= 6 ? 0.75 : 0.5);
+                    const useRapidSequence = wouldBeConsecutive || (diff.stars >= 5 && Math.random() < rapidChance);
                     
                     if (useRapidSequence) {
                         // Create rapid sequence instead of chord (다다다닥)
@@ -831,6 +840,8 @@ var visualizer = (() => {
                                 confidence: note.confidence,
                                 isChord: true
                             });
+                            // Update last chord time
+                            lastChordTime = note.time;
                         }
                     }
                 });
