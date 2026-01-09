@@ -54,16 +54,26 @@ var visualizer = (() => {
 
     // Difficulty settings - 10 levels with progressive challenge
     const DIFFICULTIES = [
-        { stars: 1, name: 'BEGINNER', noteMultiplier: 0.10, segmentThreshold: 0.98, color: '#88E0A0', chordChance: 0, slideChance: 0, burstChance: 0 },
-        { stars: 2, name: 'EASY', noteMultiplier: 0.18, segmentThreshold: 0.95, color: '#00D4AA', chordChance: 0, slideChance: 0, burstChance: 0 },
-        { stars: 3, name: 'NORMAL', noteMultiplier: 0.28, segmentThreshold: 0.88, color: '#00B4FF', chordChance: 0.05, slideChance: 0, burstChance: 0 },
-        { stars: 4, name: 'HARD', noteMultiplier: 0.40, segmentThreshold: 0.78, color: '#3399FF', chordChance: 0.10, slideChance: 0.05, burstChance: 0 },
-        { stars: 5, name: 'EXPERT', noteMultiplier: 0.55, segmentThreshold: 0.65, color: '#FFB800', chordChance: 0.18, slideChance: 0.12, burstChance: 0.05 },
-        { stars: 6, name: 'MASTER', noteMultiplier: 0.70, segmentThreshold: 0.50, color: '#FF9500', chordChance: 0.25, slideChance: 0.18, burstChance: 0.10 },
-        { stars: 7, name: 'LUNATIC', noteMultiplier: 0.82, segmentThreshold: 0.38, color: '#FF6B35', chordChance: 0.32, slideChance: 0.25, burstChance: 0.15 },
-        { stars: 8, name: 'INFERNO', noteMultiplier: 0.92, segmentThreshold: 0.25, color: '#FF3366', chordChance: 0.40, slideChance: 0.30, burstChance: 0.22 },
-        { stars: 9, name: 'CHAOS', noteMultiplier: 1.0, segmentThreshold: 0.15, color: '#CC00FF', chordChance: 0.50, slideChance: 0.38, burstChance: 0.30 },
-        { stars: 10, name: 'ABSOLUTE', noteMultiplier: 1.15, segmentThreshold: 0.08, color: '#FF0066', chordChance: 0.60, slideChance: 0.45, burstChance: 0.40 }
+        // ★1 BEGINNER - 입문자용, 아주 느린 패턴
+        { stars: 1, name: 'BEGINNER', noteMultiplier: 0.15, segmentThreshold: 0.98, color: '#88E0A0', chordChance: 0, slideChance: 0, burstChance: 0 },
+        // ★2 EASY - 쉬움, 기본 패턴
+        { stars: 2, name: 'EASY', noteMultiplier: 0.25, segmentThreshold: 0.92, color: '#00D4AA', chordChance: 0, slideChance: 0, burstChance: 0 },
+        // ★3 NORMAL - 보통, 약간의 밀도 증가
+        { stars: 3, name: 'NORMAL', noteMultiplier: 0.40, segmentThreshold: 0.85, color: '#00B4FF', chordChance: 0.08, slideChance: 0.05, burstChance: 0 },
+        // ★4 HARD - 어려움, 코드와 슬라이드 시작
+        { stars: 4, name: 'HARD', noteMultiplier: 0.55, segmentThreshold: 0.75, color: '#3399FF', chordChance: 0.15, slideChance: 0.12, burstChance: 0 },
+        // ★5 EXPERT - 상급, 빠른 패턴 시작
+        { stars: 5, name: 'EXPERT', noteMultiplier: 0.70, segmentThreshold: 0.60, color: '#FFB800', chordChance: 0.25, slideChance: 0.20, burstChance: 0.08 },
+        // ★6 MASTER - 마스터, 본격적인 고난이도
+        { stars: 6, name: 'MASTER', noteMultiplier: 0.85, segmentThreshold: 0.45, color: '#FF9500', chordChance: 0.35, slideChance: 0.28, burstChance: 0.15 },
+        // ★7 LUNATIC - 광기, 매우 빠르고 복잡한 패턴
+        { stars: 7, name: 'LUNATIC', noteMultiplier: 1.0, segmentThreshold: 0.32, color: '#FF6B35', chordChance: 0.45, slideChance: 0.35, burstChance: 0.25 },
+        // ★8 INFERNO - 지옥, 극악 패턴
+        { stars: 8, name: 'INFERNO', noteMultiplier: 1.20, segmentThreshold: 0.20, color: '#FF3366', chordChance: 0.55, slideChance: 0.45, burstChance: 0.35 },
+        // ★9 CHAOS - 혼돈, 거의 불가능
+        { stars: 9, name: 'CHAOS', noteMultiplier: 1.45, segmentThreshold: 0.10, color: '#CC00FF', chordChance: 0.65, slideChance: 0.55, burstChance: 0.50 },
+        // ★10 ABSOLUTE - 절대자, 인간의 한계를 초월
+        { stars: 10, name: 'ABSOLUTE', noteMultiplier: 1.80, segmentThreshold: 0.05, color: '#FF0066', chordChance: 0.75, slideChance: 0.65, burstChance: 0.70 }
     ];
 
     // ====== HIGH SCORE STORAGE ======
@@ -759,9 +769,27 @@ var visualizer = (() => {
 
                     // Add a second note in a different lane
                     let chordLane;
-                    if (diff.stars >= 8) {
-                        // Very high difficulty: 3-note chords possible
-                        const numExtraNotes = Math.random() < 0.3 ? 2 : 1;
+                    if (diff.stars >= 9) {
+                        // ★9-10: 3-4 note chords very common
+                        const numExtraNotes = Math.random() < 0.5 ? 3 : (Math.random() < 0.7 ? 2 : 1);
+                        for (let i = 0; i < numExtraNotes; i++) {
+                            chordLane = (note.lane + 1 + i) % LANES;
+                            if (chordLane !== note.lane && !overlapsWithSlide(note.time, chordLane)) {
+                                notes.push({
+                                    id: `chord-${index}-${i}`,
+                                    type: 'tap',
+                                    time: note.time,
+                                    lane: chordLane,
+                                    hit: false,
+                                    passed: false,
+                                    confidence: note.confidence,
+                                    isChord: true
+                                });
+                            }
+                        }
+                    } else if (diff.stars >= 7) {
+                        // ★7-8: 2-3 note chords
+                        const numExtraNotes = Math.random() < 0.4 ? 2 : 1;
                         for (let i = 0; i < numExtraNotes; i++) {
                             chordLane = (note.lane + 1 + i * 2) % LANES;
                             if (chordLane !== note.lane && !overlapsWithSlide(note.time, chordLane)) {
@@ -798,10 +826,10 @@ var visualizer = (() => {
                 });
             }
 
-            // FIFTH: Add burst notes (rapid consecutive notes) for highest difficulties
+            // FIFTH: Add burst notes (rapid consecutive notes) for higher difficulties
             const burstChance = diff.burstChance || 0;
-            if (burstChance > 0 && diff.stars >= 5) {
-                const highEnergySegments = segments.filter(s => (s.loudness_max || -20) > maxLoudness - loudnessRange * 0.2);
+            if (burstChance > 0 && diff.stars >= 4) {
+                const highEnergySegments = segments.filter(s => (s.loudness_max || -20) > maxLoudness - loudnessRange * 0.25);
                 highEnergySegments.forEach((segment, index) => {
                     if (Math.random() > burstChance) return;
                     
@@ -809,20 +837,48 @@ var visualizer = (() => {
                     if (startTime < MIN_NOTE_TIME) return;
                     
                     // Check if there's already notes close by
-                    const hasNearbyNotes = notes.some(n => Math.abs(n.time - startTime) < 200);
+                    const hasNearbyNotes = notes.some(n => Math.abs(n.time - startTime) < 150);
                     if (hasNearbyNotes) return;
                     
-                    // Create a burst of 3-6 rapid notes
-                    const burstLength = 3 + Math.floor(Math.random() * (diff.stars >= 8 ? 4 : 2));
-                    const burstInterval = Math.max(80, 150 - diff.stars * 8); // Faster at higher difficulties
+                    // Create a burst of rapid notes - more notes at higher difficulties
+                    let burstLength, burstInterval;
+                    if (diff.stars >= 10) {
+                        burstLength = 8 + Math.floor(Math.random() * 6); // 8-13 notes
+                        burstInterval = 50 + Math.floor(Math.random() * 30); // 50-80ms (insane speed)
+                    } else if (diff.stars >= 9) {
+                        burstLength = 6 + Math.floor(Math.random() * 5); // 6-10 notes
+                        burstInterval = 60 + Math.floor(Math.random() * 30); // 60-90ms
+                    } else if (diff.stars >= 8) {
+                        burstLength = 5 + Math.floor(Math.random() * 4); // 5-8 notes
+                        burstInterval = 70 + Math.floor(Math.random() * 30); // 70-100ms
+                    } else if (diff.stars >= 7) {
+                        burstLength = 4 + Math.floor(Math.random() * 3); // 4-6 notes
+                        burstInterval = 80 + Math.floor(Math.random() * 30); // 80-110ms
+                    } else {
+                        burstLength = 3 + Math.floor(Math.random() * 2); // 3-4 notes
+                        burstInterval = 100 + Math.floor(Math.random() * 30); // 100-130ms
+                    }
+                    
                     let currentLane = Math.floor(Math.random() * LANES);
                     
                     for (let i = 0; i < burstLength; i++) {
                         const noteTime = startTime + i * burstInterval;
-                        // Alternate lanes for playability
+                        
+                        // Complex lane patterns at high difficulty
                         if (i > 0) {
-                            const direction = i % 2 === 0 ? 1 : -1;
-                            currentLane = Math.max(0, Math.min(LANES - 1, currentLane + direction));
+                            if (diff.stars >= 9) {
+                                // Chaotic zigzag pattern
+                                const patterns = [1, -1, 2, -2, 1, -1];
+                                currentLane = Math.max(0, Math.min(LANES - 1, currentLane + patterns[i % patterns.length]));
+                            } else if (diff.stars >= 7) {
+                                // Alternating pattern
+                                const direction = i % 2 === 0 ? 1 : -1;
+                                currentLane = Math.max(0, Math.min(LANES - 1, currentLane + direction * (Math.random() < 0.3 ? 2 : 1)));
+                            } else {
+                                // Simple alternating
+                                const direction = i % 2 === 0 ? 1 : -1;
+                                currentLane = Math.max(0, Math.min(LANES - 1, currentLane + direction));
+                            }
                         }
                         
                         if (!overlapsWithSlide(noteTime, currentLane)) {
@@ -882,10 +938,23 @@ var visualizer = (() => {
             }
 
             // Ensure minimum gap between notes for playability
+            // Gap decreases at higher difficulties for faster patterns
             filteredNotes.sort((a, b) => a.time - b.time || a.lane - b.lane);
 
             const lastNoteTimePerLane = {};
             const notesToRemove = new Set();
+            
+            // Dynamic gap based on difficulty - lower gap = harder
+            const getMinGapForDifficulty = () => {
+                if (diff.stars >= 10) return 40;  // Absolute - 거의 없음
+                if (diff.stars >= 9) return 55;   // Chaos - 매우 빠른 연타
+                if (diff.stars >= 8) return 70;   // Inferno - 빠른 연타
+                if (diff.stars >= 7) return 85;   // Lunatic - 연타 가능
+                if (diff.stars >= 6) return 100;  // Master
+                if (diff.stars >= 5) return 115;  // Expert
+                return MIN_NOTE_GAP; // 150ms for lower difficulties
+            };
+            const dynamicMinGap = getMinGapForDifficulty();
 
             filteredNotes.forEach((note, index) => {
                 const lane = note.lane;
@@ -893,7 +962,7 @@ var visualizer = (() => {
 
                 if (lastTime !== undefined) {
                     const gap = note.time - lastTime;
-                    const requiredGap = note.type === 'slide' ? MIN_SLIDE_END_GAP : MIN_NOTE_GAP;
+                    const requiredGap = note.type === 'slide' ? MIN_SLIDE_END_GAP : dynamicMinGap;
 
                     if (gap < requiredGap && gap > 0) {
                         notesToRemove.add(index);
