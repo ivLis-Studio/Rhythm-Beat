@@ -304,7 +304,8 @@ var visualizer = (() => {
             random: false,
             noFail: false,
             hidden: false,  // Notes fade out before judge line
-            sudden: false   // Notes appear suddenly near judge line
+            sudden: false,  // Notes appear suddenly near judge line
+            half: false     // Play only 50% of the song
         },
         offset: 0, // Audio sync offset in ms
         laneCover: 0 // Lane cover percentage from top (0-50)
@@ -909,7 +910,17 @@ var visualizer = (() => {
             });
 
             // Remove notes that are too close
-            const playableNotes = filteredNotes.filter((_, index) => !notesToRemove.has(index));
+            let playableNotes = filteredNotes.filter((_, index) => !notesToRemove.has(index));
+
+            // Half mode: only keep notes in the first 50% of the song
+            const isHalfMode = settings.modifiers?.half;
+            if (isHalfMode && analysis.track?.duration) {
+                const halfDuration = (analysis.track.duration * 1000) * 0.5;
+                playableNotes = playableNotes.filter(note => {
+                    const noteEndTime = note.type === 'slide' ? note.time + note.duration : note.time;
+                    return noteEndTime <= halfDuration;
+                });
+            }
 
             return playableNotes;
         }, [LANES, settings.modifiers]);
@@ -1262,12 +1273,18 @@ var visualizer = (() => {
             if (state.gameEnded) return;
 
             const currentTime = Spicetify.Player.getProgress();
-            const songEnd = state.songDuration - 1000; // End 1 second before song ends
+            const isHalfMode = settings.modifiers?.half;
+            const songEnd = isHalfMode 
+                ? state.songDuration * 0.5  // End at 50% for half mode
+                : state.songDuration - 1000; // End 1 second before song ends
 
+            // For half mode, check if we've passed 50% of notes or time
+            const halfModeEnd = isHalfMode && currentTime >= songEnd;
+            
             const allNotesDone = state.notes.every(n => n.hit || n.passed);
             const isDead = state.hp <= 0;
             const shouldEnd = (allNotesDone && state.notes.length > 0) ||
-                (currentTime >= songEnd && songEnd > 0) || isDead;
+                (currentTime >= songEnd && songEnd > 0) || isDead || halfModeEnd;
 
             if (shouldEnd) {
                 state.gameEnded = true;
@@ -1960,6 +1977,7 @@ var visualizer = (() => {
         if (modifiers?.noFail) activeModifiers.push({ icon: 'NF', name: 'No Fail' });
         if (modifiers?.hidden) activeModifiers.push({ icon: 'HD', name: 'Hidden' });
         if (modifiers?.sudden) activeModifiers.push({ icon: 'SD', name: 'Sudden' });
+        if (modifiers?.half) activeModifiers.push({ icon: '½', name: 'Half' });
 
         return React.createElement('div', { className: 'rhythm-container' },
             // Countdown Overlay
@@ -2242,7 +2260,8 @@ var visualizer = (() => {
                             { key: 'random', icon: 'RND', name: 'Random', desc: 'Randomize note positions' },
                             { key: 'noFail', icon: 'NF', name: 'No Fail', desc: 'Cannot die from HP loss' },
                             { key: 'hidden', icon: 'HD', name: 'Hidden', desc: 'Notes fade out before judge line' },
-                            { key: 'sudden', icon: 'SD', name: 'Sudden', desc: 'Notes appear near judge line' }
+                            { key: 'sudden', icon: 'SD', name: 'Sudden', desc: 'Notes appear near judge line' },
+                            { key: 'half', icon: '½', name: 'Half', desc: 'Play only 50% of the song' }
                         ].map(mod => React.createElement('div', {
                             key: mod.key,
                             onClick: () => onSettingChange('modifiers', { ...settings.modifiers, [mod.key]: !settings.modifiers?.[mod.key] }),
