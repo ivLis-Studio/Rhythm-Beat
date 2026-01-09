@@ -4,10 +4,23 @@ var visualizer = (() => {
 
     // ====== GAME CONFIGURATION ======
     // Key Configurations for different modes
+    // Uses both display labels and KeyboardEvent.code for cross-platform compatibility (Windows/Mac)
     const KEY_CONFIGS = {
-        4: { keys: ['D', 'F', 'J', 'K'], colors: ['#FF3366', '#00D4AA', '#00B4FF', '#FF3366'] },
-        6: { keys: ['S', 'D', 'F', 'J', 'K', 'L'], colors: ['#FF3366', '#FF6B35', '#00D4AA', '#00B4FF', '#00D4AA', '#FF3366'] },
-        8: { keys: ['A', 'S', 'D', 'F', 'J', 'K', 'L', ';'], colors: ['#FF3366', '#FF6B35', '#FFB800', '#00D4AA', '#00B4FF', '#00D4AA', '#FF6B35', '#FF3366'] }
+        4: {
+            keys: ['D', 'F', 'J', 'K'],
+            codes: ['KeyD', 'KeyF', 'KeyJ', 'KeyK'],
+            colors: ['#FF3366', '#00D4AA', '#00B4FF', '#FF3366']
+        },
+        6: {
+            keys: ['S', 'D', 'F', 'J', 'K', 'L'],
+            codes: ['KeyS', 'KeyD', 'KeyF', 'KeyJ', 'KeyK', 'KeyL'],
+            colors: ['#FF3366', '#FF6B35', '#00D4AA', '#00B4FF', '#00D4AA', '#FF3366']
+        },
+        8: {
+            keys: ['A', 'S', 'D', 'F', 'J', 'K', 'L', ';'],
+            codes: ['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyJ', 'KeyK', 'KeyL', 'Semicolon'],
+            colors: ['#FF3366', '#FF6B35', '#FFB800', '#00D4AA', '#00B4FF', '#00D4AA', '#FF6B35', '#FF3366']
+        }
     };
 
     const GAME_WIDTH = 500; // Slightly wider
@@ -27,6 +40,10 @@ var visualizer = (() => {
     const NOTE_SYNC_THRESHOLD = 80;
     // Minimum time before notes can appear (ms)
     const MIN_NOTE_TIME = 1000;
+    // Minimum gap between notes in the same lane (ms) for playability
+    const MIN_NOTE_GAP = 150;
+    // Minimum gap after slide note ends before another note in same lane (ms)
+    const MIN_SLIDE_END_GAP = 200;
 
     const SCORE_VALUES = {
         PERFECT: 1000,
@@ -330,6 +347,7 @@ var visualizer = (() => {
         // Dynamic constants based on settings
         const LANES = keyMode;
         const LANE_KEYS = customKeys?.[keyMode] || keyConfig.keys;
+        const LANE_CODES = keyConfig.codes; // KeyboardEvent.code for cross-platform (Mac/Windows)
         const LANE_COLORS = keyConfig.colors;
         const NOTE_SPEED = speed * 100;
 
@@ -395,7 +413,7 @@ var visualizer = (() => {
         const cachedGradientsRef = useRef(null);
         const MAX_PARTICLES = 500;
 
-        // Generate notes from audio analysis
+        // Generate notes from audio analysis - Improved algorithm
         const generateNotes = useCallback((analysis, diff) => {
             if (!analysis) return [];
 
@@ -403,11 +421,51 @@ var visualizer = (() => {
             const slideNotes = [];
             const beats = analysis.beats || [];
             const segments = analysis.segments || [];
-            const bars = analysis.bars || [];
+            const sections = analysis.sections || [];
+            const track = analysis.track || {};
+
+            // Get tempo and time signature info
+            const tempo = track.tempo || 120;
+            const timeSignature = track.time_signature || 4;
+            const beatInterval = 60000 / tempo; // ms per beat
 
             // Get modifiers from settings
             const isMirror = settings.modifiers?.mirror;
             const isRandom = settings.modifiers?.random;
+
+            // Analyze segments for loudness range (for dynamic lane assignment)
+            const loudnessValues = segments.map(s => s.loudness_max || s.loudness_start || -20);
+            const minLoudness = Math.min(...loudnessValues);
+            const maxLoudness = Math.max(...loudnessValues);
+            const loudnessRange = maxLoudness - minLoudness || 1;
+
+            // Analyze segments for pitch patterns
+            const getPitchLane = (segment) => {
+                if (!segment.pitches || segment.pitches.length === 0) {
+                    return Math.floor(LANES / 2);
+                }
+                // Find dominant pitch (0-11 representing C to B)
+                const maxPitchIndex = segment.pitches.indexOf(Math.max(...segment.pitches));
+                // Map 12 pitches to available lanes
+                return Math.floor((maxPitchIndex / 12) * LANES);
+            };
+
+            // Get loudness-based lane (louder = more center, quieter = more edges)
+            const getLoudnessLane = (segment) => {
+                const loudness = segment.loudness_max || segment.loudness_start || -20;
+                const normalized = (loudness - minLoudness) / loudnessRange; // 0-1
+                // Map to lanes: quiet sounds go to edges, loud sounds go to center
+                if (normalized > 0.6) {
+                    // Loud - center lanes
+                    return Math.floor(LANES / 2) + (Math.random() > 0.5 ? 0 : -1);
+                } else if (normalized < 0.3) {
+                    // Quiet - edge lanes
+                    return Math.random() > 0.5 ? 0 : LANES - 1;
+                } else {
+                    // Medium - any lane
+                    return Math.floor(Math.random() * LANES);
+                }
+            };
 
             // Helper function to check if a time overlaps with any slide note in the same lane
             const overlapsWithSlide = (time, lane) => {
@@ -420,6 +478,7 @@ var visualizer = (() => {
 
             // Apply lane modifier
             const applyLaneModifier = (lane) => {
+                lane = Math.max(0, Math.min(LANES - 1, lane)); // Clamp to valid range
                 if (isMirror) {
                     return LANES - 1 - lane;
                 }
@@ -429,15 +488,106 @@ var visualizer = (() => {
                 return lane;
             };
 
-            // FIRST: Generate slide notes for higher difficulties
+            // Find the section for a given time
+            const getSectionAtTime = (time) => {
+                const timeSec = time / 1000;
+                return sections.find((s, i) => {
+                    const nextSection = sections[i + 1];
+                    return timeSec >= s.start && (!nextSection || timeSec < nextSection.start);
+                });
+            };
+
+            // Find the closest segment for a given time
+            const getSegmentAtTime = (time) => {
+                const timeSec = time / 1000;
+                let closest = segments[0];
+                let minDiff = Infinity;
+                for (const seg of segments) {
+                    const diff = Math.abs(seg.start - timeSec);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closest = seg;
+                    }
+                    if (seg.start > timeSec) break;
+                }
+                return closest;
+            };
+
+            // Track lane history for creating flowing patterns
+            let lastLane = Math.floor(LANES / 2);
+            let patternDirection = 1; // 1 = moving right, -1 = moving left
+            let consecutiveCount = 0;
+            const maxConsecutive = 3; // Max notes in same lane before forcing movement
+
+            // Smart lane selection that creates musical patterns
+            const getSmartLane = (time, segment, beatIndex) => {
+                const section = getSectionAtTime(time);
+                const sectionLoudness = section?.loudness || -10;
+
+                // High energy sections: more movement, use pitch-based lanes
+                // Low energy sections: simpler patterns, stay center
+                const isHighEnergy = sectionLoudness > -8;
+
+                let targetLane;
+
+                if (isHighEnergy && segment) {
+                    // Use pitch to determine lane for melodic feel
+                    targetLane = getPitchLane(segment);
+                } else if (segment) {
+                    // Use loudness for dynamic feel
+                    targetLane = getLoudnessLane(segment);
+                } else {
+                    // Fallback: create flowing pattern
+                    targetLane = lastLane + patternDirection;
+                }
+
+                // Apply pattern rules for playability
+                if (targetLane === lastLane) {
+                    consecutiveCount++;
+                    if (consecutiveCount >= maxConsecutive) {
+                        // Force lane change after too many consecutive same-lane notes
+                        targetLane = lastLane + patternDirection;
+                        consecutiveCount = 0;
+                    }
+                } else {
+                    consecutiveCount = 0;
+                }
+
+                // Bounce at edges
+                if (targetLane >= LANES) {
+                    targetLane = LANES - 2;
+                    patternDirection = -1;
+                } else if (targetLane < 0) {
+                    targetLane = 1;
+                    patternDirection = 1;
+                }
+
+                // Occasionally change direction for variety (on strong beats)
+                if (beatIndex % timeSignature === 0 && Math.random() < 0.3) {
+                    patternDirection *= -1;
+                }
+
+                lastLane = targetLane;
+                return Math.max(0, Math.min(LANES - 1, targetLane));
+            };
+
+            // FIRST: Generate slide notes for higher difficulties (on sustained notes/sections)
             if (diff.stars >= 3) {
-                bars.forEach((bar, index) => {
+                // Use sections with high loudness for slide notes
+                sections.forEach((section, index) => {
+                    if (section.loudness < -10) return; // Skip quiet sections
                     if (index % (6 - diff.stars) !== 0) return;
 
-                    let lane = Math.floor(bar.start * 100) % LANES;
+                    const time = section.start * 1000;
+                    if (time < MIN_NOTE_TIME) return;
+
+                    // Duration based on section confidence and difficulty
+                    const maxDuration = Math.min(section.duration * 1000 * 0.3, 2000);
+                    const duration = Math.max(500, maxDuration * (section.confidence || 0.5));
+
+                    // Place slide notes on edge lanes for easier play
+                    let lane = index % 2 === 0 ? 0 : LANES - 1;
                     lane = applyLaneModifier(lane);
-                    const time = bar.start * 1000;
-                    const duration = Math.min(bar.duration * 1000, 2000);
 
                     const totalTicks = Math.max(10, Math.floor(duration / 100));
                     notes.push({
@@ -456,17 +606,38 @@ var visualizer = (() => {
                 });
             }
 
-            // SECOND: Generate tap notes from beats
+            // SECOND: Generate tap notes from beats with musical lane assignment
+            const beatsPerMeasure = timeSignature;
+
             beats.forEach((beat, index) => {
-                if (diff.noteMultiplier < 1.0 && index % Math.floor(1 / diff.noteMultiplier) !== 0) return;
+                // Apply difficulty filter
+                if (diff.noteMultiplier < 1.0) {
+                    const skipRate = Math.floor(1 / diff.noteMultiplier);
+                    // Keep strong beats (downbeats), skip some weak beats
+                    const beatInMeasure = index % beatsPerMeasure;
+                    const isStrongBeat = beatInMeasure === 0 || beatInMeasure === Math.floor(beatsPerMeasure / 2);
+
+                    if (!isStrongBeat && index % skipRate !== 0) return;
+                }
 
                 const time = beat.start * 1000;
-                let lane = Math.floor(beat.start * 100) % LANES;
+                if (time < MIN_NOTE_TIME) return;
+
+                const segment = getSegmentAtTime(time);
+                let lane = getSmartLane(time, segment, index);
                 lane = applyLaneModifier(lane);
 
                 if (overlapsWithSlide(time, lane)) {
-                    lane = (lane + 1) % LANES;
-                    if (overlapsWithSlide(time, lane)) return;
+                    // Try adjacent lanes
+                    const altLane1 = (lane + 1) % LANES;
+                    const altLane2 = (lane - 1 + LANES) % LANES;
+                    if (!overlapsWithSlide(time, altLane1)) {
+                        lane = altLane1;
+                    } else if (!overlapsWithSlide(time, altLane2)) {
+                        lane = altLane2;
+                    } else {
+                        return; // Skip this note
+                    }
                 }
 
                 notes.push({
@@ -476,86 +647,144 @@ var visualizer = (() => {
                     lane: lane,
                     hit: false,
                     passed: false,
-                    confidence: beat.confidence || 0.5
+                    confidence: beat.confidence || 0.5,
+                    isDownbeat: index % beatsPerMeasure === 0
                 });
             });
 
-            // Add extra notes from segments - AVOID slide overlaps
-            segments.forEach((segment, index) => {
-                if (segment.confidence > diff.segmentThreshold) {
-                    let lane = (index + 2) % LANES;
-                    lane = applyLaneModifier(lane);
+            // THIRD: Add accent notes from high-confidence segments (for difficult modes)
+            if (diff.stars >= 2) {
+                segments.forEach((segment, index) => {
+                    // Only add notes for significant musical events
+                    const isLoudEnough = (segment.loudness_max || -20) > (maxLoudness - loudnessRange * 0.3);
+                    const isConfident = (segment.confidence || 0) > diff.segmentThreshold;
+
+                    if (!isLoudEnough || !isConfident) return;
+
                     const time = segment.start * 1000;
+                    if (time < MIN_NOTE_TIME) return;
+
+                    // Check if there's already a note close to this time
+                    const existingNote = notes.find(n =>
+                        Math.abs(n.time - time) < beatInterval * 0.4
+                    );
+                    if (existingNote) return;
+
+                    let lane = getPitchLane(segment);
+                    lane = applyLaneModifier(lane);
 
                     if (overlapsWithSlide(time, lane)) return;
 
-                    const existingNote = notes.find(n =>
-                        Math.abs(n.time - time) < 120 && n.lane === lane
-                    );
-                    if (!existingNote) {
+                    notes.push({
+                        id: `seg-${index}`,
+                        type: 'tap',
+                        time: time,
+                        lane: lane,
+                        hit: false,
+                        passed: false,
+                        confidence: segment.confidence,
+                        isAccent: true
+                    });
+                });
+            }
+
+            // FOURTH: Add chord notes (simultaneous notes) on strong beats for higher difficulties
+            if (diff.stars >= 4) {
+                const downbeats = notes.filter(n => n.isDownbeat && n.type === 'tap');
+                downbeats.forEach((note, index) => {
+                    if (index % 2 !== 0) return; // Only every other downbeat
+
+                    // Add a second note in a different lane
+                    const chordLane = note.lane <= LANES / 2 ? note.lane + 2 : note.lane - 2;
+                    const clampedLane = Math.max(0, Math.min(LANES - 1, chordLane));
+
+                    if (clampedLane !== note.lane && !overlapsWithSlide(note.time, clampedLane)) {
                         notes.push({
-                            id: `seg-${index}`,
+                            id: `chord-${index}`,
                             type: 'tap',
-                            time: time,
-                            lane: lane,
+                            time: note.time,
+                            lane: clampedLane,
                             hit: false,
                             passed: false,
-                            confidence: segment.confidence
+                            confidence: note.confidence,
+                            isChord: true
                         });
                     }
+                });
+            }
+
+            // Sort notes by time
+            notes.sort((a, b) => a.time - b.time);
+
+            // Filter out notes in the first second
+            const filteredNotes = notes.filter(note => note.time >= MIN_NOTE_TIME);
+
+            // Snap all notes to BPM grid for tight timing
+            const quarterBeat = beatInterval / 4;
+            const eighthBeat = beatInterval / 8;
+            const gridSize = diff.stars >= 4 ? eighthBeat : quarterBeat; // Finer grid for hard modes
+
+            filteredNotes.forEach(note => {
+                const beatPosition = note.time / gridSize;
+                const snappedBeatPosition = Math.round(beatPosition);
+                const snappedTime = snappedBeatPosition * gridSize;
+
+                // Snap if within half grid size
+                if (Math.abs(note.time - snappedTime) < gridSize / 2) {
+                    note.time = snappedTime;
                 }
             });
 
-            // Sort notes by time first
-            notes.sort((a, b) => a.time - b.time);
-
-            // Filter out notes in the first second (0~1000ms)
-            const filteredNotes = notes.filter(note => note.time >= MIN_NOTE_TIME);
-
-            // Synchronize near-simultaneous notes (within NOTE_SYNC_THRESHOLD)
-            // Group notes that are close in time and align them to the earliest time in the group
+            // Synchronize near-simultaneous notes to create clean chords
             for (let i = 0; i < filteredNotes.length; i++) {
                 const baseNote = filteredNotes[i];
-                if (baseNote.type === 'slide') continue; // Skip slide notes for sync
+                if (baseNote.type === 'slide') continue;
 
-                // Find all notes within the threshold that are in different lanes
                 for (let j = i + 1; j < filteredNotes.length; j++) {
                     const compareNote = filteredNotes[j];
                     if (compareNote.type === 'slide') continue;
 
                     const timeDiff = Math.abs(compareNote.time - baseNote.time);
                     if (timeDiff <= NOTE_SYNC_THRESHOLD && compareNote.lane !== baseNote.lane) {
-                        // Snap the later note to the earlier note's time
                         compareNote.time = baseNote.time;
                     } else if (timeDiff > NOTE_SYNC_THRESHOLD) {
-                        // Notes are sorted, so no need to check further
                         break;
                     }
                 }
             }
 
-            // Snap notes to BPM grid if tempo info is available
-            const tempo = analysis?.track?.tempo;
-            if (tempo && tempo > 0) {
-                const beatInterval = 60000 / tempo; // ms per beat
-                const quarterBeat = beatInterval / 4;
+            // Ensure minimum gap between notes for playability
+            filteredNotes.sort((a, b) => a.time - b.time || a.lane - b.lane);
 
-                filteredNotes.forEach(note => {
-                    if (note.type === 'slide') return;
+            const lastNoteTimePerLane = {};
+            const notesToRemove = new Set();
 
-                    // Find the nearest beat subdivision (quarter beat)
-                    const beatPosition = note.time / quarterBeat;
-                    const snappedBeatPosition = Math.round(beatPosition);
-                    const snappedTime = snappedBeatPosition * quarterBeat;
+            filteredNotes.forEach((note, index) => {
+                const lane = note.lane;
+                const lastTime = lastNoteTimePerLane[lane];
 
-                    // Only snap if within reasonable distance (half of quarter beat)
-                    if (Math.abs(note.time - snappedTime) < quarterBeat / 2) {
-                        note.time = snappedTime;
+                if (lastTime !== undefined) {
+                    const gap = note.time - lastTime;
+                    const requiredGap = note.type === 'slide' ? MIN_SLIDE_END_GAP : MIN_NOTE_GAP;
+
+                    if (gap < requiredGap && gap > 0) {
+                        notesToRemove.add(index);
+                        return;
                     }
-                });
-            }
+                }
 
-            return filteredNotes;
+                // Update last time for this lane
+                if (note.type === 'slide') {
+                    lastNoteTimePerLane[lane] = note.time + note.duration + MIN_SLIDE_END_GAP;
+                } else {
+                    lastNoteTimePerLane[lane] = note.time;
+                }
+            });
+
+            // Remove notes that are too close
+            const playableNotes = filteredNotes.filter((_, index) => !notesToRemove.has(index));
+
+            return playableNotes;
         }, [LANES, settings.modifiers]);
 
         // Initialize game
@@ -658,23 +887,37 @@ var visualizer = (() => {
                     return;
                 }
 
-                const key = e.key.toUpperCase();
-                const laneIndex = LANE_KEYS.indexOf(key);
+                // Use e.code for cross-platform compatibility (Mac/Windows)
+                // e.code gives physical key position, works regardless of keyboard layout
+                const code = e.code;
+                let laneIndex = LANE_CODES.indexOf(code);
 
-                if (laneIndex !== -1 && !keysPressed.current[key]) {
-                    keysPressed.current[key] = true;
-                    keysHeld.current[key] = true;
+                // Fallback to e.key for custom key bindings or non-standard keyboards
+                if (laneIndex === -1) {
+                    const key = e.key.toUpperCase();
+                    laneIndex = LANE_KEYS.indexOf(key);
+                }
+
+                if (laneIndex !== -1 && !keysPressed.current[code]) {
+                    keysPressed.current[code] = true;
+                    keysHeld.current[LANE_KEYS[laneIndex]] = true; // Use display key for visual feedback
                     handleNoteHit(laneIndex);
                 }
             };
 
             const handleKeyUp = (e) => {
-                const key = e.key.toUpperCase();
-                keysPressed.current[key] = false;
-                keysHeld.current[key] = false;
+                const code = e.code;
+                let laneIndex = LANE_CODES.indexOf(code);
 
-                const laneIndex = LANE_KEYS.indexOf(key);
+                // Fallback to e.key
+                if (laneIndex === -1) {
+                    const key = e.key.toUpperCase();
+                    laneIndex = LANE_KEYS.indexOf(key);
+                }
+
+                keysPressed.current[code] = false;
                 if (laneIndex !== -1) {
+                    keysHeld.current[LANE_KEYS[laneIndex]] = false;
                     handleNoteRelease(laneIndex);
                 }
             };
@@ -686,7 +929,7 @@ var visualizer = (() => {
                 window.removeEventListener('keydown', handleKeyDown);
                 window.removeEventListener('keyup', handleKeyUp);
             };
-        }, [LANES, LANE_KEYS]);
+        }, [LANES, LANE_KEYS, LANE_CODES]);
 
         // Handle note release (for slide notes)
         const handleNoteRelease = useCallback((lane) => {
