@@ -30,10 +30,10 @@ var visualizer = (() => {
 
     // Timing windows (in ms)
     const TIMING = {
-        PERFECT: 50,
-        GREAT: 100,
-        GOOD: 150,
-        MISS: 270
+        PERFECT: 70,
+        GREAT: 140,
+        GOOD: 230,
+        MISS: 350
     };
 
     // Note synchronization threshold (ms) - notes within this window will be synchronized
@@ -2369,72 +2369,10 @@ var visualizer = (() => {
     }
 
     // ====== TITLE SCREEN COMPONENT (Refactored) ======
-    function TitleScreen({ trackInfo, onSelectDifficulty, settings, onSettingChange }) {
+    function TitleScreen({ trackInfo, onSelectDifficulty, settings, onSettingChange, isFullscreen, onToggleFullscreen }) {
         const [activeTab, setActiveTab] = useState('play');
         const [selectedDiff, setSelectedDiff] = useState(2);
         const [highScore, setHighScore] = useState(null);
-        const [isFullscreen, setIsFullscreen] = useState(false);
-
-        // Fullscreen toggle function - hides Spotify UI and fills screen with game
-        const toggleFullscreen = useCallback(() => {
-            const isCurrentlyFullscreen = document.body.classList.contains('rhythm-game-fullscreen');
-            
-            if (!isCurrentlyFullscreen) {
-                // Enter game fullscreen mode
-                document.body.classList.add('rhythm-game-fullscreen');
-                setIsFullscreen(true);
-                
-                // Also try browser fullscreen for immersion
-                const elem = document.documentElement;
-                if (elem.requestFullscreen) {
-                    elem.requestFullscreen().catch(() => {});
-                } else if (elem.webkitRequestFullscreen) {
-                    elem.webkitRequestFullscreen();
-                }
-            } else {
-                // Exit game fullscreen mode
-                document.body.classList.remove('rhythm-game-fullscreen');
-                setIsFullscreen(false);
-                
-                // Exit browser fullscreen if active
-                if (document.fullscreenElement) {
-                    if (document.exitFullscreen) {
-                        document.exitFullscreen().catch(() => {});
-                    } else if (document.webkitExitFullscreen) {
-                        document.webkitExitFullscreen();
-                    }
-                }
-            }
-        }, []);
-
-        // Listen for fullscreen changes and sync state
-        useEffect(() => {
-            const handleFullscreenChange = () => {
-                // If browser exits fullscreen (e.g., ESC key), also exit game fullscreen
-                if (!document.fullscreenElement && document.body.classList.contains('rhythm-game-fullscreen')) {
-                    document.body.classList.remove('rhythm-game-fullscreen');
-                    setIsFullscreen(false);
-                }
-            };
-            document.addEventListener('fullscreenchange', handleFullscreenChange);
-            document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-            return () => {
-                document.removeEventListener('fullscreenchange', handleFullscreenChange);
-                document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
-            };
-        }, []);
-
-        // F11 keyboard shortcut for fullscreen
-        useEffect(() => {
-            const handleKeyDown = (e) => {
-                if (e.key === 'F11') {
-                    e.preventDefault();
-                    toggleFullscreen();
-                }
-            };
-            window.addEventListener('keydown', handleKeyDown);
-            return () => window.removeEventListener('keydown', handleKeyDown);
-        }, [toggleFullscreen]);
 
         const trackId = useMemo(() => {
             if (!trackInfo?.uri) return null;
@@ -2543,7 +2481,7 @@ var visualizer = (() => {
                 // Fullscreen button
                 React.createElement('button', { 
                     className: 'fullscreen-button', 
-                    onClick: toggleFullscreen,
+                    onClick: onToggleFullscreen,
                     title: isFullscreen ? 'Exit Fullscreen (F11)' : 'Enter Fullscreen (F11)'
                 }, 
                     React.createElement('svg', { 
@@ -2681,6 +2619,105 @@ var visualizer = (() => {
         const [loading, setLoading] = useState(true);
         const [settings, setSettings] = useState(() => loadSettings());
         const [isNewHighScore, setIsNewHighScore] = useState(false);
+        const [isFullscreen, setIsFullscreen] = useState(false);
+
+        // Calculate optimal scale based on screen size
+        const calculateOptimalScale = useCallback(() => {
+            const screenWidth = window.innerWidth;
+            const screenHeight = window.innerHeight;
+            
+            // Base game layout size (3 panels: 260 + 380 + 260 + gaps)
+            const baseWidth = 260 + 380 + 260 + 32 + 32; // ~964px
+            const baseHeight = 800;
+            
+            // Calculate scale to fit screen with some padding
+            const scaleX = (screenWidth * 0.95) / baseWidth;
+            const scaleY = (screenHeight * 0.95) / baseHeight;
+            
+            // Use the smaller scale to ensure it fits, but cap at reasonable max
+            return Math.min(scaleX, scaleY, 2.0);
+        }, []);
+
+        // Fullscreen toggle function - hides Spotify UI and fills screen with game
+        const toggleFullscreen = useCallback(() => {
+            const isCurrentlyFullscreen = document.body.classList.contains('rhythm-game-fullscreen');
+            
+            if (!isCurrentlyFullscreen) {
+                // Calculate and apply dynamic scale
+                const scale = calculateOptimalScale();
+                document.documentElement.style.setProperty('--fullscreen-scale', scale);
+                
+                // Enter game fullscreen mode
+                document.body.classList.add('rhythm-game-fullscreen');
+                setIsFullscreen(true);
+                
+                // Also try browser fullscreen for immersion
+                const elem = document.documentElement;
+                if (elem.requestFullscreen) {
+                    elem.requestFullscreen().catch(() => {});
+                } else if (elem.webkitRequestFullscreen) {
+                    elem.webkitRequestFullscreen();
+                }
+            } else {
+                // Exit game fullscreen mode
+                document.body.classList.remove('rhythm-game-fullscreen');
+                document.documentElement.style.removeProperty('--fullscreen-scale');
+                setIsFullscreen(false);
+                
+                // Exit browser fullscreen if active
+                if (document.fullscreenElement) {
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen().catch(() => {});
+                    } else if (document.webkitExitFullscreen) {
+                        document.webkitExitFullscreen();
+                    }
+                }
+            }
+        }, [calculateOptimalScale]);
+
+        // Listen for fullscreen changes and sync state (App level - persists across screens)
+        useEffect(() => {
+            const handleFullscreenChange = () => {
+                // If browser exits fullscreen (e.g., ESC key), also exit game fullscreen
+                if (!document.fullscreenElement && document.body.classList.contains('rhythm-game-fullscreen')) {
+                    document.body.classList.remove('rhythm-game-fullscreen');
+                    document.documentElement.style.removeProperty('--fullscreen-scale');
+                    setIsFullscreen(false);
+                }
+            };
+            
+            // Handle window resize to recalculate scale
+            const handleResize = () => {
+                if (document.body.classList.contains('rhythm-game-fullscreen')) {
+                    const scale = calculateOptimalScale();
+                    document.documentElement.style.setProperty('--fullscreen-scale', scale);
+                }
+            };
+            
+            // F11 keyboard shortcut for fullscreen
+            const handleKeyDown = (e) => {
+                if (e.key === 'F11') {
+                    e.preventDefault();
+                    toggleFullscreen();
+                }
+            };
+            
+            document.addEventListener('fullscreenchange', handleFullscreenChange);
+            document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+            window.addEventListener('resize', handleResize);
+            window.addEventListener('keydown', handleKeyDown);
+            
+            // Cleanup on unmount - restore Spotify UI
+            return () => {
+                document.removeEventListener('fullscreenchange', handleFullscreenChange);
+                document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+                window.removeEventListener('resize', handleResize);
+                window.removeEventListener('keydown', handleKeyDown);
+                // Clean up fullscreen state when App unmounts (leaving the game completely)
+                document.body.classList.remove('rhythm-game-fullscreen');
+                document.documentElement.style.removeProperty('--fullscreen-scale');
+            };
+        }, [calculateOptimalScale, toggleFullscreen]);
 
         // Load and pause on mount
         useEffect(() => {
@@ -2837,7 +2874,9 @@ var visualizer = (() => {
                 trackInfo: trackInfo,
                 onSelectDifficulty: handleSelectDifficulty,
                 settings: settings,
-                onSettingChange: handleSettingChange
+                onSettingChange: handleSettingChange,
+                isFullscreen: isFullscreen,
+                onToggleFullscreen: toggleFullscreen
             });
         }
 

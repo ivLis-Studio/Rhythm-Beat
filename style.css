@@ -768,6 +768,24 @@ body.rhythm-game-fullscreen .rhythm-container {
   border-radius: 0 !important;
 }
 
+/* Scale up game panels in fullscreen mode - dynamic scale based on screen size */
+body.rhythm-game-fullscreen .game-layout {
+  transform: scale(var(--fullscreen-scale, 1.4));
+  transform-origin: center center;
+}
+
+/* Title screen fullscreen scaling - dynamic */
+body.rhythm-game-fullscreen .title-container {
+  transform: scale(var(--fullscreen-scale, 1.4));
+  transform-origin: center center;
+}
+
+/* Result screen fullscreen scaling - dynamic */
+body.rhythm-game-fullscreen .result-container {
+  transform: scale(var(--fullscreen-scale, 1.4));
+  transform-origin: center center;
+}
+
 /* ========================================
    SETTINGS SCREEN
    ======================================== */
